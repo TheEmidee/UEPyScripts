@@ -1,0 +1,278 @@
+{
+	"Groups": [
+		{
+			"Name": "Compile SummerCampEditor Win64",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "Compile SummerCampEditor Win64",
+					"DependsOn": "",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "SummerCampEditor Win64 Test=UE.EditorBootTest",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "SummerCampEditor Win64 Test=UE.EditorBootTest",
+					"DependsOn": "Compile SummerCampEditor Win64",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "SummerCampEditor Win64 Test=UE.EditorAutomation",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "SummerCampEditor Win64 Test=UE.EditorAutomation",
+					"DependsOn": "SummerCampEditor Win64 Test=UE.EditorBootTest",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "Data Validation Win64",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "Naming Convention Validation Win64",
+					"DependsOn": "Compile SummerCampEditor Win64",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Data Validation Win64",
+					"DependsOn": "Compile SummerCampEditor Win64",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Compile All Blueprints Win64",
+					"DependsOn": "Compile SummerCampEditor Win64",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "Compile SummerCamp Win64 Development",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "Compile SummerCamp Win64 Development",
+					"DependsOn": "",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "Package SummerCamp Win64 Development",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "Cook SummerCamp Win64 Development",
+					"DependsOn": "Naming Convention Validation Win64;Data Validation Win64;Compile All Blueprints Win64",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Package SummerCamp Win64 Development",
+					"DependsOn": "Compile SummerCamp Win64 Development;Cook SummerCamp Win64 Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Zip SummerCamp Win64 Development",
+					"DependsOn": "Package SummerCamp Win64 Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Publish SummerCamp Win64 Development",
+					"DependsOn": "Package SummerCamp Win64 Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Publish Zip SummerCamp Win64 Development",
+					"DependsOn": "Zip SummerCamp Win64 Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "SummerCamp Win64 Development Test=UE.BootTest",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "SummerCamp Win64 Development Test=UE.BootTest",
+					"DependsOn": "Publish SummerCamp Win64 Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "Compile SummerCamp Switch Development",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "Compile SummerCamp Switch Development",
+					"DependsOn": "",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		},
+		{
+			"Name": "Package SummerCamp Switch Development",
+			"Agent Types": [
+				"Win64"
+			],
+			"Nodes": [
+				{
+					"Name": "Cook SummerCamp Switch Development",
+					"DependsOn": "Naming Convention Validation Win64;Data Validation Win64;Compile All Blueprints Win64",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Package SummerCamp Switch Development",
+					"DependsOn": "Compile SummerCamp Switch Development;Cook SummerCamp Switch Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Zip SummerCamp Switch Development",
+					"DependsOn": "Package SummerCamp Switch Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				},
+				{
+					"Name": "Publish Zip SummerCamp Switch Development",
+					"DependsOn": "Zip SummerCamp Switch Development",
+					"RunEarly": false,
+					"Notify": 
+					{
+						"Default": "",
+						"Submitters": "",
+						"Warnings": true
+					}
+				}
+			]
+		}
+	],
+	"Badges": [
+	],
+	"Reports": [
+	]
+}
