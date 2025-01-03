@@ -1,5 +1,7 @@
 from .. import logger
 from pathlib import Path
+import json
+import os 
 
 class ProjectSavedFolders:
     buildgraph : Path
@@ -32,6 +34,7 @@ class Project:
     project_name : str
     uproject_path : Path
     project_folders : ProjectFolders
+    engine_association : str
 
     def __init__(self, uproject_path : Path):
         self.uproject_path = uproject_path
@@ -39,12 +42,17 @@ class Project:
         self.root_folder = uproject_path.parent
         self.project_folders = ProjectFolders(self.root_folder)
 
+        with open(self.uproject_path, 'r') as f:
+            uproject_json = json.load(f)
+            self.engine_association = uproject_json["EngineAssociation"]        
+
     def __str__(self):
         return f"""
 ----- Project infos -----
 * Folder : {self.root_folder}
 * ProjectName : {self.project_name}
 * UProjectPath : {self.uproject_path}
+* EngineAssociation : {self.engine_association}
 ----- Project infos -----
         """
 
@@ -64,7 +72,6 @@ def find_parent_with_project_file(
     return None
 
 def resolve_project() -> Project :
-    import os 
     dir_path = os.path.dirname(os.path.realpath(__file__))
 
     uproject_path = find_parent_with_project_file(dir_path)
