@@ -37,7 +37,7 @@ class Project:
     engine_association : str
 
     def __init__(self, uproject_path : Path):
-        self.uproject_path = uproject_path
+        self.uproject_path = uproject_path.resolve()
         self.project_name = uproject_path.stem
         self.root_folder = uproject_path.parent
         self.project_folders = ProjectFolders(self.root_folder)
@@ -67,7 +67,7 @@ def find_parent_with_project_file(
     for path in search_paths:
         for file in path.iterdir():
             if file.is_file() and file.suffix == ".uproject":
-                return file
+                return file.resolve()
     
     return None
 
