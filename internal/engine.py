@@ -3,6 +3,7 @@ from .project import Project
 from pathlib import Path
 from packaging.version import Version
 import json
+import os
 import pathlib
 
 class Engine:
@@ -66,9 +67,44 @@ class Engine:
 * Version : {self.version}
 ----- Engine infos -----
         """
+    
+def resolve_engine_from_env_var(project: Project) -> Path:
+    node_ue_root = os.environ["NODE_UE_ROOT"]
+    if node_ue_root:
+        path = Path(path)
+        if path.exists():
+            path = path.joinpath(project.engine_association)
+            if path.exists():
+                return path
+            
+            raise Exception(f"The environment variable NODE_UE_ROOT is set to {node_ue_root} but no engine folder named {project.engine_association} exists")
+        
+        raise Exception(f"The environment variable NODE_UE_ROOT is set to {node_ue_root} but this folder does not exist")
 
-def resolve_engine_path(project: Project) -> str:
-    return pathlib.Path(__file__).parent.parent.parent
+    return ""
+
+def resolve_engine_from_registry(project: Project) -> Path:
+    return ""
+
+def resolve_engine_from_program_files(project: Project) -> Path:
+    return ""
+
+def resolve_engine_from_path(project: Project) -> Path:
+    return ""
+
+def resolve_engine_path(project: Project) -> Path:
+    path = resolve_engine_from_env_var(project)
+    if not path:
+        path = resolve_engine_from_registry(project)
+        if not path:
+            path = resolve_engine_from_program_files(project)
+            if not path:
+                path = resolve_engine_from_path(project)
+
+    if not path.exists():
+        raise Exception("Impossible to locate the engine")
+    
+    return path
 
 def resolve_engine(project: Project) -> Engine:
     engine = Engine(resolve_engine_path(project))
