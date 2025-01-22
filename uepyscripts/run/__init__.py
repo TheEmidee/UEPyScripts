@@ -1,7 +1,13 @@
-from .. import engine
-from .. import logger
+from uepyscripts import logger
+from uepyscripts.internal.engine import get_engine
 
-def run(
+def uat(args: list[str]):
+    logger.info("UAT - {args}".format( args = args ))
+
+    engine = get_engine()
+    engine.uat( args )
+
+def buildgraph(
     target: str, 
     extra_properties : dict[str,str] = None, 
     extra_parameters : list[str] = None
@@ -10,4 +16,4 @@ def run(
     logger.debug(f"Extra Properties : {extra_properties}")
     logger.debug(f"Extra Parameters : {extra_parameters}")
     
-    engine.uat(["a","b"])
+    uat(["a","b"])

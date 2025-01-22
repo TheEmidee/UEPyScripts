@@ -13,12 +13,3 @@ logger.addHandler(console_handler)
 
 # Ensure the logger doesn't propagate to the root logger
 logger.propagate = False
-
-try:
-    from .internal.project import resolve_project
-    from .internal.engine import resolve_engine
-    
-    project = resolve_project()
-    engine = resolve_engine(project)
-except Exception as e:
-    logger.fatal(e)

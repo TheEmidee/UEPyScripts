@@ -1,10 +1,9 @@
-from .. import logger
-from .project import Project
+from uepyscripts import logger
+from uepyscripts.internal.project import Project
 from pathlib import Path
 from packaging.version import Version
 import json
 import os
-import pathlib
 
 class Engine:
     class Runner:
@@ -110,3 +109,9 @@ def resolve_engine(project: Project) -> Engine:
     engine = Engine(resolve_engine_path(project))
     logger.info(engine)
     return engine
+
+def get_engine() -> Engine:
+    from uepyscripts.internal.project import resolve_project
+    
+    project = resolve_project()
+    return resolve_engine(project)

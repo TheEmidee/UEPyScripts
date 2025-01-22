@@ -1,4 +1,4 @@
-from .. import logger
+from uepyscripts import logger
 from pathlib import Path
 import json
 import os 
