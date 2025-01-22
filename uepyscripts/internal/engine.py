@@ -152,8 +152,8 @@ def resolve_engine(project: Project) -> Engine:
     logger.info(engine)
     return engine
 
-def get_engine() -> Engine:
-    from uepyscripts.internal.project import resolve_project
+# def get_engine() -> Engine:
+#     from uepyscripts.internal.project import resolve_project
     
-    project = resolve_project()
-    return resolve_engine(project)
+#     project = resolve_project()
+#     return resolve_engine(project)

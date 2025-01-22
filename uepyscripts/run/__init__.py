@@ -1,10 +1,9 @@
 from uepyscripts import logger
-from uepyscripts.internal.engine import get_engine
+from uepyscripts import engine
 
 def uat(args: list[str]):
     logger.info("UAT - {args}".format( args = args ))
-
-    engine = get_engine()
+    
     engine.uat( args )
 
 def buildgraph(
