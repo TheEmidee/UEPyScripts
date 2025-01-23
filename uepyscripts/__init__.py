@@ -17,10 +17,8 @@ logger.propagate = False
 
 from uepyscripts.internal.project import resolve_project
 from uepyscripts.internal.engine import resolve_engine
+from uepyscripts.internal.config import resolve_config
 
 project = resolve_project()
 engine = resolve_engine(project)
-
-script_dir = os.path.dirname(__file__)
-
-logger.debug(f"Current script dir {script_dir}")
+config = resolve_config(project)

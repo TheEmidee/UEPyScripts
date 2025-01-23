@@ -21,13 +21,11 @@ class ProjectSavedFolders:
 
 class ProjectFolders:
     config : Path
-    config_pyscripts : Path
     saved : Path
     saved_folder : ProjectSavedFolders
 
     def __init__(self, root_folder : Path):
         self.config = root_folder.joinpath("Config")
-        self.config_pyscripts = self.config.joinpath("PyScripts")
         self.saved = root_folder.joinpath("Saved")
         self.saved_folders = ProjectSavedFolders(self.saved)
 
