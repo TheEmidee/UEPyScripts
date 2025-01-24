@@ -64,13 +64,19 @@ class Engine:
         self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"))
         self.ubt_path = self.Runner(self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"),{self.project.uproject_path})
         self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"))
-        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"))
+        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"),{self.project.uproject_path})
 
-    def uat(self, args: list[str]):
+    def uat(self, args: list[str] = None):
         self.uat_path.run(args)
 
-    def ubt(self, args: list[str]):
+    def ubt(self, args: list[str] = None):
         self.ubt_path.run(args)
+
+    def build(self, args: list[str] = None):
+        self.build_bat_path.run(args)
+
+    def run_editor(self, args: list[str] = None):
+        self.editor_exe_path.run(args)
 
     def get_version_number(self) -> Version:
         version = ""
