@@ -6,6 +6,7 @@ from uepyscripts.tools.algo.topological_order import Graph
 import json
 from pathlib import Path
 from dataclasses import dataclass
+from mako.template import Template
 
 class BuildNode:
     def __init__(
@@ -29,11 +30,6 @@ class BuildGroup:
         for node in json_node['Nodes']:
             self.nodes.append(BuildNode(node))
 
-@dataclass
-class BuildDependency:
-    build_group : str
-    dependent_group : str
-
 class BuildPlatform:
     def __init__(
         self,
@@ -41,12 +37,12 @@ class BuildPlatform:
     ):
         self.name = name
         self.job_to_group : dict[str,str] = {}
-        self.groups : list[BuildGroup] = []
+        self.groups : dict[str,BuildGroup] = {}
         self.parallel_groups : list[list[str]] = []
 
     def parse_group(self,json_node):
         group = BuildGroup(json_node)
-        self.groups.append(group)
+        self.groups.update( { group.name : group } )
 
         for node in group.nodes:
             self.job_to_group.update( { node.name : group.name } )
@@ -54,14 +50,14 @@ class BuildPlatform:
     def build_parallel_groups(self):
         g = Graph()
 
-        for group in self.groups:
+        for group_name, group in self.groups.items():
             for node in group.nodes:
                 for dependency in node.depends_on:
                     required_group_name = self.job_to_group[dependency]
-                    g.add_edge(group.name,required_group_name)
+                    if required_group_name != group.name:
+                        g.add_edge(group.name,required_group_name)
 
         self.parallel_groups = g.topological_sort_with_hierarchy()
-
 
 class BuildContext:
     def __init__(
@@ -91,6 +87,34 @@ class BuildContext:
         for name, platform in self.platforms.items():
             platform.build_parallel_groups()
 
+TEMPLATE = """
+def properties = "${ctx.inlined_properties}"
+
+% for platform_name,platform in ctx.platforms.items():
+    % for group_names in platform.parallel_groups:
+        jobs = [:]
+
+        % for group_name in group_names:
+            jobs[ "${group_name}" ] = {
+                runBuildGraph( 
+                    "${group_name}", 
+                    [ 
+                        % for node in platform.groups[group_name].nodes:
+                            "${node.name}",
+                        % endfor
+                    ],
+                    "${platform_name}",
+                    properties 
+                    )
+            }
+        % endfor
+
+        jobs.failFast = true
+        parallel jobs
+    % endfor
+% endfor
+"""
+
 def read_json(
     path : Path
 ):
@@ -114,4 +138,6 @@ def generate_jenkins_file(
     buildgraph( target, properties, extra_parameters )
     json = read_json(export_path)
     build_context = BuildContext(json,properties)
-    pass
+
+    tmp = Template(TEMPLATE)
+    print(tmp.render(ctx=build_context))
