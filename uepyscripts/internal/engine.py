@@ -10,9 +10,6 @@ import subprocess
 
 class Engine:
     class Runner:
-        path : Path
-        extra_args : list[str] = None
-
         def __init__(
                 self, 
                 path : Path,
@@ -46,15 +43,6 @@ class Engine:
                 logger.fatal(f"Error occurred: {e}")
                 logger.fatal(f"Error code: {e.returncode}")
                 logger.fatal(f"Stderr: {e.stderr}")
-
-    project : Project
-    root_path : Path
-    path : Path
-    version : Version
-    uat_path : Runner
-    ubt_ath : Runner
-    build_bat_path : Runner
-    editor_exe_path : Runner
     
     def __init__(self, project : Project):
         self.project = project

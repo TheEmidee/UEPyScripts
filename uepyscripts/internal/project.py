@@ -4,13 +4,6 @@ import json
 import os 
 
 class ProjectSavedFolders:
-    buildgraph : Path
-    jenkins : Path
-    temp : Path
-    tests : Path
-    local_builds : Path
-    staged_builds : Path
-
     def __init__(self, saved_folder : Path):
         self.buildgraph = saved_folder.joinpath("BuildGraph")
         self.jenkins = saved_folder.joinpath("Jenkins")
@@ -20,22 +13,12 @@ class ProjectSavedFolders:
         self.staged_builds = saved_folder.joinpath("StagedBuilds")
 
 class ProjectFolders:
-    config : Path
-    saved : Path
-    saved_folder : ProjectSavedFolders
-
     def __init__(self, root_folder : Path):
         self.config = root_folder.joinpath("Config")
         self.saved = root_folder.joinpath("Saved")
         self.saved_folders = ProjectSavedFolders(self.saved)
 
 class Project:
-    root_folder : Path
-    project_name : str
-    uproject_path : Path
-    project_folders : ProjectFolders
-    engine_association : str
-
     def __init__(self, uproject_path : Path):
         self.uproject_path = uproject_path.resolve()
         self.project_name = uproject_path.stem

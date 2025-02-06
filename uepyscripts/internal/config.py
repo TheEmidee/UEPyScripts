@@ -6,11 +6,9 @@ import os
 import configparser
 
 class Config:
-    folder : Path
-    config = configparser.ConfigParser()
-
     def __init__(self, folder : Path):
         self.folder = folder
+        self.config = configparser.ConfigParser()
 
         logger.debug("Initializing config")
 

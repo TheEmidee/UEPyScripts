@@ -91,7 +91,9 @@ class BuildContext:
         for name, platform in self.platforms.items():
             platform.build_parallel_groups()
 
-def read_json(path : Path):
+def read_json(
+    path : Path
+):
     with open(path) as f:
         return json.load(f)
 
