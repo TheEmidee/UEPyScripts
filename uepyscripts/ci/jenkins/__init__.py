@@ -1,12 +1,14 @@
 from uepyscripts import logger
 from uepyscripts import project
+from uepyscripts import engine
+from uepyscripts import config
 from uepyscripts.run import buildgraph
 from uepyscripts.tools.algo.topological_order import Graph
 
 import json
 from pathlib import Path
-from dataclasses import dataclass
 from mako.template import Template
+from mako.lookup import TemplateLookup
 
 class BuildNode:
     def __init__(
@@ -87,6 +89,11 @@ class BuildContext:
         for name, platform in self.platforms.items():
             platform.build_parallel_groups()
 
+class RenderContext:
+    def __init__(self):
+        self.engine = engine
+        self.project = project
+
 TEMPLATE = """
 def properties = "${ctx.inlined_properties}"
 
@@ -122,6 +129,7 @@ def read_json(
         return json.load(f)
 
 def generate_jenkins_file(
+    template_file_name : str,
     target: str, 
     properties : dict[str,str] = None 
 ):
@@ -135,9 +143,35 @@ def generate_jenkins_file(
         "uebp_UATMutexNoWait=1"
     ]
 
+    output_folder = project.root_folder.joinpath(config["Jenkins"]["OutputFolder"])
+    logger.info(f"Output folder : {output_folder}")
+    if not output_folder.exists():
+        raise Exception("The folder where to output the jenkinsfile does not exist")
+    
+    templates_folder = project.root_folder.joinpath(config["Jenkins"]["TemplatesFolder"])
+    logger.info(f"TemplatesFolder : {templates_folder}")
+    if not templates_folder.exists():
+        raise Exception("The folder where to find the templates does not exist")
+    
+    template_path = templates_folder.joinpath(f"{template_file_name}.template")
+    logger.info(f"TemplatePath : {template_path}")
+    if not template_path.exists():
+        raise Exception("Impossible to find the jenkins template file")
+
     buildgraph( target, properties, extra_parameters )
     json = read_json(export_path)
     build_context = BuildContext(json,properties)
 
-    tmp = Template(TEMPLATE)
-    print(tmp.render(ctx=build_context))
+    template_lookup = TemplateLookup(directories=[templates_folder], output_encoding='utf-8', encoding_errors='replace')
+
+    template = template_lookup.get_template(f"{template_file_name}.template")
+
+    render_context = RenderContext()
+    render = template.render(render_context=render_context)
+
+    output_file = output_folder.joinpath(f"{template_file_name}_2")
+
+    # open as binary because the output is in utf-8
+    # required because if we output as text, all the EOL are doubled
+    with open(output_file, "wb") as file:
+        file.write(render)
