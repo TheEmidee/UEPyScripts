@@ -86,6 +86,9 @@ class Engine:
                 version += f".{jenkins_version_file.read()}"
 
         return Version(version)
+    
+    def get_short_version_number(self) -> str:
+        return f"{self.version.major}.{self.version.minor}"
 
     def __str__(self):
         return f"""
