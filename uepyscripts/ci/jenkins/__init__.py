@@ -90,9 +90,14 @@ class BuildContext:
             platform.build_parallel_groups()
 
 class RenderContext:
-    def __init__(self):
+    def __init__(
+        self,
+        jobs : str
+        ):
         self.engine = engine
         self.project = project
+        self.jobs = jobs
+        self.config = config
 
 TEMPLATE = """
 def properties = "${ctx.inlined_properties}"
@@ -162,11 +167,13 @@ def generate_jenkins_file(
     json = read_json(export_path)
     build_context = BuildContext(json,properties)
 
-    template_lookup = TemplateLookup(directories=[templates_folder], output_encoding='utf-8', encoding_errors='replace')
+    jobs_template = Template(TEMPLATE)
+    jobs_output = jobs_template.render(ctx=build_context)
 
+    template_lookup = TemplateLookup(directories=[templates_folder], output_encoding='utf-8', encoding_errors='replace')
     template = template_lookup.get_template(f"{template_file_name}.template")
 
-    render_context = RenderContext()
+    render_context = RenderContext(jobs_output)
     render = template.render(render_context=render_context)
 
     output_file = output_folder.joinpath(f"{template_file_name}_2")
