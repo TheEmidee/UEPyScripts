@@ -41,7 +41,7 @@ class Project:
 
 def find_parent_with_project_file(
     starting_path : Path,
-    max_parents : int =5
+    max_parents : int = 10
     ):
     current_path = Path(starting_path).resolve()
 
@@ -59,7 +59,7 @@ def resolve_project() -> Project :
 
     uproject_path = find_parent_with_project_file(dir_path)
     if not uproject_path:
-        raise Exception("Could not find a uproject file")
+        raise Exception(f"Could not find a uproject file from {dir_path}")
     
     logger.debug(f"Found uproject file at {uproject_path}")
     project = Project(uproject_path)

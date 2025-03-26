@@ -1,7 +1,7 @@
 from uepyscripts import logger
-from uepyscripts import engine
-from uepyscripts import project
-from uepyscripts import config
+from uepyscripts.context import engine
+from uepyscripts.context import project
+from uepyscripts.context import config
 from pathlib import Path
 
 def fix_path(path : Path) -> str:
