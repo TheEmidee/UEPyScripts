@@ -1,27 +1,6 @@
 # This script sets up a Python virtual environment in the parent directory and installs dependencies from requirements.txt
 $venvName = ".venv"
-$venvPath = Join-Path -Path $PSScriptRoot -ChildPath "../$($venvName)" | Resolve-Path
-
-function Test-PythonInstallation
-{
-    Write-Host "Check if python is installed..."
-
-    $pythonPath = Get-Command python -ErrorAction SilentlyContinue
-
-    if ($pythonPath) {
-        # Get the Python version
-        $pythonVersion = & $pythonPath.Source --version
-
-        # Extract just the version number
-        $versionNumber = $pythonVersion -replace "Python ", ""
-
-        # Output the installation path and version number
-        Write-Host "Python is installed at: $($pythonPath.Source)" -ForegroundColor Green
-        Write-Host "Python version: $versionNumber" -ForegroundColor Green
-    } else {
-        throw "Python is not installed."
-    }
-}
+$venvPath = Join-Path -Path $PSScriptRoot -ChildPath "../$($venvName)"
 
 function Initialize-PythonVEnv
 {
@@ -69,5 +48,4 @@ function Test-PythonVirtualEnvironment
     }
 }
 
-Test-PythonInstallation
 Test-PythonVirtualEnvironment
