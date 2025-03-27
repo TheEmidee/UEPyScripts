@@ -13,12 +13,14 @@ class Engine:
         def __init__(
                 self, 
                 path : Path,
+                capture_output : bool,
                 extra_args : list[str] = []
                 ):
             if not path.exists():
                 raise FileNotFoundError(f"The file {path} does not exist")
             
             self.path = path.resolve()
+            self.capture_output = capture_output
             self.extra_args = extra_args
 
         def run(
@@ -28,15 +30,33 @@ class Engine:
             logger.debug(f"run process for {self.path} with arguments {args}")
     
             try:
-                process  = subprocess.Popen(
-                    [str(self.path)] + self.extra_args + args,
-                    stdout=subprocess.PIPE
-                )
+                all_args = [self.path]
 
-                for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-                    logger.info(line.replace('\n',''))
+                if self.extra_args is not None:
+                    all_args += self.extra_args
                 
-                return process.returncode
+                if args is not None:
+                    all_args += args
+
+                all_args_str = " ".join(map(str,all_args))
+
+                if self.capture_output:
+                    process  = subprocess.Popen(
+                        all_args_str,
+                        stdout=subprocess.PIPE
+                    )
+
+                    for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
+                        logger.info(line.replace('\n',''))
+                    
+                    return process.returncode
+                else:
+                    process  = subprocess.Popen(
+                        all_args_str,
+                        stdout=subprocess.PIPE
+                    )
+
+                    return process.returncode
 
             except subprocess.CalledProcessError as e:
                 logger.fatal(f"Error occured when running {self.path}. ")
@@ -49,10 +69,10 @@ class Engine:
         self.root_path = resolve_engine_path(project)
         self.path = self.root_path.joinpath("Engine").resolve()
         self.version = self.get_version_number()
-        self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"))
-        self.ubt_path = self.Runner(self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"),{self.project.uproject_path})
-        self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"))
-        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"),{self.project.uproject_path})
+        self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"), True )
+        self.ubt_path = self.Runner(self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"), True,[str(self.project.uproject_path)])
+        self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"), True)
+        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False,[str(self.project.uproject_path)])
 
     def uat(self, args: list[str] = None):
         self.uat_path.run(args)
