@@ -1,10 +1,12 @@
 from uepyscripts import logger
-from uepyscripts import project
-from uepyscripts import engine
-from uepyscripts import config
+from uepyscripts.context import project
+from uepyscripts.context import engine
+from uepyscripts.context import config
 from uepyscripts.run import buildgraph
 from uepyscripts.tools.algo.topological_order import Graph
 
+import json
+import argparse
 import json
 from pathlib import Path
 from mako.template import Template
@@ -133,52 +135,57 @@ def read_json(
     with open(path) as f:
         return json.load(f)
 
-def generate_jenkins_file(
-    template_file_name : str,
-    target: str, 
-    properties : dict[str,str] = None 
-):
-    temp_folder = project.project_folders.saved_folders.temp
-    temp_folder.mkdir(exist_ok=True)
+parser = argparse.ArgumentParser(description="Generate a jenkisnfile based on command-line arguments.")
+parser.add_argument("template_file_name", type=str, help="The name of the template to use")
+parser.add_argument("--target", type=str, default="", help="The buildgraph target name")
+parser.add_argument("--properties", type=str, default="", help="JSON string representing a dictionary with the properties to pass to buildgraph. Ex: {'key1': 'value1', 'key2': 'value2'}")
+args = parser.parse_args()
 
-    export_path = temp_folder.joinpath("buildgraph.json")
+template_file_name = args.template_file_name
+target = args.target
+properties = json.loads(args.properties) if args.properties else {}
 
-    extra_parameters = [
-        f"-Export={export_path}",
-        "uebp_UATMutexNoWait=1"
-    ]
+temp_folder = project.project_folders.saved_folders.temp
+temp_folder.mkdir(exist_ok=True)
 
-    output_folder = project.root_folder.joinpath(config["Jenkins"]["OutputFolder"])
-    logger.info(f"Output folder : {output_folder}")
-    if not output_folder.exists():
-        raise Exception("The folder where to output the jenkinsfile does not exist")
-    
-    templates_folder = project.root_folder.joinpath(config["Jenkins"]["TemplatesFolder"])
-    logger.info(f"TemplatesFolder : {templates_folder}")
-    if not templates_folder.exists():
-        raise Exception("The folder where to find the templates does not exist")
-    
-    template_path = templates_folder.joinpath(f"{template_file_name}.template")
-    logger.info(f"TemplatePath : {template_path}")
-    if not template_path.exists():
-        raise Exception("Impossible to find the jenkins template file")
+export_path = temp_folder.joinpath("buildgraph.json")
 
-    buildgraph( target, properties, extra_parameters )
-    json = read_json(export_path)
-    build_context = BuildContext(json,properties)
+extra_parameters = [
+    f"-Export={export_path}",
+    "uebp_UATMutexNoWait=1"
+]
 
-    jobs_template = Template(TEMPLATE)
-    jobs_output = jobs_template.render(ctx=build_context)
+output_folder = project.root_folder.joinpath(config["Jenkins"]["OutputFolder"])
+logger.info(f"Output folder : {output_folder}")
+if not output_folder.exists():
+    raise Exception("The folder where to output the jenkinsfile does not exist")
 
-    template_lookup = TemplateLookup(directories=[templates_folder], output_encoding='utf-8', encoding_errors='replace')
-    template = template_lookup.get_template(f"{template_file_name}.template")
+templates_folder = project.root_folder.joinpath(config["Jenkins"]["TemplatesFolder"])
+logger.info(f"TemplatesFolder : {templates_folder}")
+if not templates_folder.exists():
+    raise Exception("The folder where to find the templates does not exist")
 
-    render_context = RenderContext(jobs_output)
-    render = template.render(render_context=render_context)
+template_path = templates_folder.joinpath(f"{template_file_name}.template")
+logger.info(f"TemplatePath : {template_path}")
+if not template_path.exists():
+    raise Exception("Impossible to find the jenkins template file")
 
-    output_file = output_folder.joinpath(f"{template_file_name}_2")
+buildgraph.run( target, properties, extra_parameters )
+json = read_json(export_path)
+build_context = BuildContext(json,properties)
 
-    # open as binary because the output is in utf-8
-    # required because if we output as text, all the EOL are doubled
-    with open(output_file, "wb") as file:
-        file.write(render)
+jobs_template = Template(TEMPLATE)
+jobs_output = jobs_template.render(ctx=build_context)
+
+template_lookup = TemplateLookup(directories=[templates_folder], output_encoding='utf-8', encoding_errors='replace')
+template = template_lookup.get_template(f"{template_file_name}.template")
+
+render_context = RenderContext(jobs_output)
+render = template.render(render_context=render_context)
+
+output_file = output_folder.joinpath(f"{template_file_name}_2")
+
+# open as binary because the output is in utf-8
+# required because if we output as text, all the EOL are doubled
+with open(output_file, "wb") as file:
+    file.write(render)
