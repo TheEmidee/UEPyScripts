@@ -63,7 +63,7 @@ def run(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Execute different tasks based on command-line arguments.")
-    parser.add_argument("target", type=str, help="The target to run in the buildgraph file")
+    parser.add_argument("--target", type=str, help="The target to run in the buildgraph file")
     parser.add_argument("--properties", type=str, default="", help="JSON string representing a dictionary with the properties to pass to buildgraph. Ex: {'key1': 'value1', 'key2': 'value2'}")
     parser.add_argument("--extra_arguments", type=str, default="", help="JSON string representing an array of extra arguments to pass to builgraph. Ex: ['item1', 'item2', 'item3']")
     args = parser.parse_args()
