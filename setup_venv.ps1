@@ -1,14 +1,18 @@
 # This script sets up a Python virtual environment in the parent directory and installs dependencies from requirements.txt
 $venvName = ".venv"
-$venvPath = Join-Path -Path $PSScriptRoot -ChildPath "../$($venvName)"
+$venvPath = Join-Path -Path $PSScriptRoot -ChildPath $venvName
 
 function Initialize-PythonVEnv
 {
-    Write-Host "Create python virtual environment in $($venvName)"
+    Write-Host "Create python virtual environment in $($venvPath)"
+
+    Push-Location $PSScriptRoot
 
     python -m venv $venvName
 
-    if ( Test-Path -Path $venvName ) {
+    Pop-Location
+
+    if ( Test-Path -Path $venvPath ) {
         Write-Host "Python virtual environment '$($venvName)' has been created successfully." -ForegroundColor Green
 
         # Activate the virtual environment
