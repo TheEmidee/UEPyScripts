@@ -1,0 +1,9 @@
+name: MyPipeline
+features:
+  slack:
+    channel: "#alerts"
+    on_failure: true
+  trigger_cron:
+    cron_string: "H 0 * * *"
+  custom_step:
+    shell: "make test"
