@@ -26,7 +26,7 @@ class Engine:
         def run(
                 self, 
                 args : list[str] = []
-                ):
+                ) -> int:
             logger.debug(f"run process for {self.path} with arguments {args}")
     
             try:
@@ -43,26 +43,33 @@ class Engine:
                 if self.capture_output:
                     process  = subprocess.Popen(
                         all_args_str,
-                        stdout=subprocess.PIPE
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        shell=True,
+                        text=True  # Handle text encoding automatically
                     )
 
-                    for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-                        logger.info(line.replace('\n',''))
-                    
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            logger.info(line.rstrip('\n'))
+
+                    process.wait()                    
                     return process.returncode
                 else:
                     process  = subprocess.Popen(
-                        all_args_str,
+                        all_args,
                         stdout=subprocess.PIPE
                     )
 
-                    return process.returncode
+                    return process.wait()
 
             except subprocess.CalledProcessError as e:
                 logger.fatal(f"Error occured when running {self.path}. ")
                 logger.fatal(f"Error occurred: {e}")
                 logger.fatal(f"Error code: {e.returncode}")
                 logger.fatal(f"Stderr: {e.stderr}")
+
+                return -1
     
     def __init__(self, project : Project):
         self.project = project
@@ -74,17 +81,17 @@ class Engine:
         self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"), True)
         self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False,[str(self.project.uproject_path)])
 
-    def uat(self, args: list[str] = None):
-        self.uat_path.run(args)
+    def uat(self, args: list[str] = None) -> int:
+        return self.uat_path.run(args)
 
-    def ubt(self, args: list[str] = None):
-        self.ubt_path.run(args)
+    def ubt(self, args: list[str] = None) -> int:
+        return self.ubt_path.run(args)
 
-    def build(self, args: list[str] = None):
-        self.build_bat_path.run(args)
+    def build(self, args: list[str] = None) -> int:
+        return self.build_bat_path.run(args)
 
-    def run_editor(self, args: list[str] = None):
-        self.editor_exe_path.run(args)
+    def run_editor(self, args: list[str] = None) -> int:
+        return self.editor_exe_path.run(args)
 
     def get_version_number(self) -> Version:
         version = ""
