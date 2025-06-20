@@ -2,10 +2,14 @@ name: MyPipeline
 features:
   slack_notifications:
     channel: "#ci-cd"
-    on_success: true
-    on_failure: true
-    on_start: true
-    webhook_credential_id: "slack-webhook-token"
+    on_success: 
+      enabled: true
+    on_failure: 
+      enabled: true
+    on_unstable: 
+      enabled: true
+    on_exception: 
+      enabled: true
 
   cron_trigger:
     schedule: "H 2 * * *"

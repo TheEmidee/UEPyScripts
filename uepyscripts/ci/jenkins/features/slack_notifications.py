@@ -3,12 +3,30 @@ from pydantic import BaseModel, validator
 
 from uepyscripts.ci.jenkins.core.base_feature import BaseFeature
 
+class SlackNotificationOnSuccessEventConfig(BaseModel):
+    enabled: bool = True
+    message_color : str = "good"
+
+class SlackNotificationOnFailureEventConfig(BaseModel):
+    enabled: bool = True
+    message_color : str = "danger"
+
+class SlackNotificationOnUnstableEventConfig(BaseModel):
+    enabled: bool = True
+    message_color : str = "warning"
+
+class SlackNotificationOnExceptionEventConfig(BaseModel):
+    enabled: bool = True
+    message_color : str = "danger"
+
 class SlackNotificationsConfig(BaseModel):
     """Configuration model for Slack notifications."""
     channel: str
-    on_success: bool = True
-    on_failure: bool = True
-    on_start: bool = False
+    on_success : SlackNotificationOnSuccessEventConfig = SlackNotificationOnSuccessEventConfig()
+    on_failure: SlackNotificationOnFailureEventConfig = SlackNotificationOnFailureEventConfig()
+    on_unstable: SlackNotificationOnUnstableEventConfig = SlackNotificationOnUnstableEventConfig()
+    on_exception: SlackNotificationOnExceptionEventConfig = SlackNotificationOnExceptionEventConfig()
+    message_template : str = "String full_message = message + \" : ${env.JOB_NAME} - ${env.CHANGE_BRANCH} #${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)\""
     webhook_credential_id: Optional[str] = None
     
     @validator('channel')

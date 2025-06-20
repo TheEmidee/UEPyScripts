@@ -3,26 +3,33 @@
 </%def>
 
 <%def name="on_build_failure()">
-sendMessageToSlack( "Failed", "danger" )
+% if feature_config['on_failure']:
+sendMessageToSlack( "Failed", "${feature_config['on_failure']['message_color']}" )
+% endif
 </%def>
 
 <%def name="on_build_unstable()">
-sendMessageToSlack( "Unstable", "warning" )
+% if feature_config['on_unstable']:
+sendMessageToSlack( "Unstable", "${feature_config['on_unstable']['message_color']}" )
+% endif
 </%def>
 
 <%def name="on_build_success()">
-sendMessageToSlack( "Success", "good" )
+% if feature_config['on_success']:
+sendMessageToSlack( "Success", "${feature_config['on_success']['message_color']}" )
+% endif
 </%def>
 
 <%def name="on_exception_thrown()">
-sendMessageToSlack( "Failure", "danger", "Reason : " + err.toString() )
+% if feature_config['on_exception']:
+sendMessageToSlack( "Failure", "${feature_config['on_exception']['message_color']}", "Reason : " + err.toString() )
+% endif
 </%def>
 
 <%def name="additional_functions()">
 def sendMessageToSlack( String message, String color, String suffix = "" ) {
+    ${feature_config['message_template']}
     <%text>
-    String full_message = message + " : ${env.JOB_NAME} - ${env.CHANGE_BRANCH} #${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)"
-
     if ( !( suffix?.trim() ) ) {
         full_message += " " + suffix
     }
