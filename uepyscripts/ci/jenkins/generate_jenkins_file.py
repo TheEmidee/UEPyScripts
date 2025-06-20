@@ -18,7 +18,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        generator = JenkinsfileGenerator()
+        generator = JenkinsfileGenerator( "D:/Projects/Summercamp_pyscripts/PyScripts/uepyscripts/ci/jenkins/templates")
         generator.generate_jenkinsfile(args.config, args.output)
 
         # if args.validate_only:
