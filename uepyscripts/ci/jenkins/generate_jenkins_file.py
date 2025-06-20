@@ -18,7 +18,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        generator = JenkinsfileGenerator( "D:/Projects/Summercamp_pyscripts/PyScripts/uepyscripts/ci/jenkins/templates")
+        generator = JenkinsfileGenerator( "E:/Dev/Projects/Summercamp_pyscripts/PyScripts/uepyscripts/ci/jenkins/templates")
         generator.generate_jenkinsfile(args.config, args.output)
 
         # if args.validate_only:
@@ -27,7 +27,6 @@ def main():
         #     config = PipelineConfig(**config_data)
         #     logger.info(f"✓ Configuration is valid")
         #     logger.info(f"  Pipeline: {config.name}")
-            
         #     feature_registry.dump_available_features()
 
     #     else:

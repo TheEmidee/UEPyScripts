@@ -1,1 +1,4 @@
-__all__ = ["slack_notifications"]
+__all__ = [
+    "slack_notifications",
+    "properties"
+    ]

@@ -8,12 +8,17 @@ class GeneratedBlocks:
 
     def merge_with(self, other: 'GeneratedBlocks'):
         """Merge this instance with another GeneratedBlocks instance."""
-        self.blocks |= other.blocks
+        for key, value in other.blocks.items():
+            if key in self.blocks:
+                self.blocks[key].extend(value)
+            else:
+                self.blocks[key] = list(value)
 
 def make_generated_blocks() -> GeneratedBlocks:
     blocks = GeneratedBlocks()
     blocks.blocks["libraries"] = []
     blocks.blocks["imports"] = []
+    blocks.blocks["properties"] = []
     blocks.blocks["pre_build_steps"] = []
     blocks.blocks["on_build_unstable"] = []
     blocks.blocks["on_build_failure"] = []

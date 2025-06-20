@@ -1,16 +1,16 @@
 name: MyPipeline
 features:
+  properties:
+    items:
+      - "buildDiscarder( logRotator( numToKeepStr: '10' ) )"
+      - "pipelineTriggers( [ cron( 'H 3 * * 1-6' ) ] )"
   slack_notifications:
     channel: "#ci-cd"
-    on_success: 
+    on_success:
       enabled: true
-    on_failure: 
+    on_failure:
       enabled: true
-    on_unstable: 
+    on_unstable:
       enabled: true
-    on_exception: 
+    on_exception:
       enabled: true
-
-  cron_trigger:
-    schedule: "H 2 * * *"
-    ignore_post_commit_hooks: true

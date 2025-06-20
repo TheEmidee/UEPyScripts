@@ -4,6 +4,10 @@
 ${libraries}
 ${imports}
 
+properties([
+${properties}
+])
+
 try {
     ${pre_build_steps}
 
