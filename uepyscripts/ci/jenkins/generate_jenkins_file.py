@@ -1,10 +1,9 @@
 from pathlib import Path
 import sys
-import yaml
 
+from uepyscripts.ci.jenkins.core.jenkins_file_generator import JenkinsfileGenerator
 from uepyscripts import logger
-from uepyscripts.ci.jenkins.features.feature_registry import feature_registry
-from uepyscripts.ci.jenkins.config.pipeline_config import PipelineConfig
+from uepyscripts.ci.jenkins.features import *
 
 def main():
     """Main CLI entry point"""
@@ -17,22 +16,19 @@ def main():
     parser.add_argument('--list-features', action='store_true', help='List available features')
     
     args = parser.parse_args()
-    
-    if args.list_features:
-        feature_registry.dump_available_features()
-        return
-    
+
     try:
-        # generator = JenkinsfileGenerator()
-        
-        if args.validate_only:
-            with open(args.config, 'r') as f:
-                config_data = yaml.safe_load(f)
-            config = PipelineConfig(**config_data)
-            logger.info(f"✓ Configuration is valid")
-            logger.info(f"  Pipeline: {config.name}")
+        generator = JenkinsfileGenerator()
+        generator.generate_jenkinsfile(args.config, args.output)
+
+        # if args.validate_only:
+        #     with open(args.config, 'r') as f:
+        #         config_data = yaml.safe_load(f)
+        #     config = PipelineConfig(**config_data)
+        #     logger.info(f"✓ Configuration is valid")
+        #     logger.info(f"  Pipeline: {config.name}")
             
-            feature_registry.dump_available_features()
+        #     feature_registry.dump_available_features()
 
     #     else:
     #         output_path = args.output or Path("Jenkinsfile")
@@ -40,9 +36,8 @@ def main():
     #         print(f"✓ Generated Jenkinsfile: {output_path}")
             
     except Exception as e:
-        logger.error(f"✗ Error: {e}")
+        logger.error(f"{e}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
