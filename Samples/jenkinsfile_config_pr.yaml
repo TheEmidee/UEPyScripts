@@ -6,16 +6,17 @@ features:
       - "pipelineTriggers( [ cron( 'H 3 * * 1-6' ) ] )"
   slack_notifications:
     channel: "#ci-cd"
-    pre_build_step:
-      enabled: true
+    //   use_simple_message: true
+    //   channel_override: "#sdsdf"
     on_success:
-      enabled: true
-    on_failure:
-      enabled: true
-    on_unstable:
-      enabled: true
-    on_exception:
-      enabled: true
+      blocks_message:
+        enabled: true
+    // on_failure:
+    //   use_simple_message: true
+    // on_unstable:
+    //   use_simple_message: true
+    // on_exception:
+    //   use_simple_message: true
   git:
     use_simple_checkout: false
     branch_name: "refs/heads/develop"

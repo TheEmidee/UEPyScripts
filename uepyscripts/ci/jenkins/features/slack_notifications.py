@@ -1,38 +1,95 @@
 from abc import ABC
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from uepyscripts.ci.jenkins.core.base_feature import BaseFeature
 
 class SlackNotificationMessageConfig(BaseModel,ABC):
     enabled: bool = False
-    message_color : str = "#0000FF"
-    message_template : str = ""
+    color : str = None
+    channel_override : str = ""
 
-class SlackNotificationPreBuildStepEventConfig(SlackNotificationMessageConfig):
+class SlackNotificationSimpleMessageConfig(SlackNotificationMessageConfig):
     enabled: bool = True
-    message_color : str = "#0000FF"
-    message_template : str = "Build Started"
+    message_template: str = ""
 
-class SlackNotificationOnSuccessEventConfig(SlackNotificationMessageConfig):
-    enabled: bool = True
-    message_color : str = "good"
-    message_template : str = "Build Success"
+class SlackNotificationBlocksMessageConfig(SlackNotificationMessageConfig):
+    enabled: bool = False
+    blocks_template: str = ""
 
-class SlackNotificationOnFailureEventConfig(SlackNotificationMessageConfig):
-    enabled: bool = True
-    message_color : str = "danger"
-    message_template : str = "Build Failed"
+class SlackNotificationEventConfig(BaseModel,ABC):
+    simple_message: SlackNotificationSimpleMessageConfig = SlackNotificationSimpleMessageConfig()
+    blocks_message: SlackNotificationBlocksMessageConfig = SlackNotificationBlocksMessageConfig()
 
-class SlackNotificationOnUnstableEventConfig(SlackNotificationMessageConfig):
-    enabled: bool = True
-    message_color : str = "warning"
-    message_template : str = "Build Unstable"
+    def _merge_with_defaults(self, field_name: str, default_factory):
+        current = getattr(self, field_name)
+        if current is None:
+            setattr(self, field_name, default_factory())
+        else:
+            default = default_factory()
+            # Fill in missing fields from default
+            for k, v in default.model_dump().items():
+                if getattr(current, k, None) in (None, "", False):
+                    setattr(current, k, v)
 
-class SlackNotificationOnExceptionEventConfig(SlackNotificationMessageConfig):
-    enabled: bool = True
-    message_color : str = "danger"
-    message_template : str = "Build Failed ( Reason : ${err} )"
+    def model_post_init(self, __context: Any) -> None:
+        # Each subclass can call this with its own logic
+        pass
+
+class SlackNotificationPreBuildStepEventConfig(SlackNotificationEventConfig):
+    def model_post_init(self, __context: Any) -> None:
+        self._merge_with_defaults(
+            "simple_message",
+            lambda: SlackNotificationSimpleMessageConfig(
+                enabled=True,
+                message_template="Build Started",
+                color="#0000FF"
+            )
+        )
+
+class SlackNotificationOnSuccessEventConfig(SlackNotificationEventConfig):
+    def model_post_init(self, __context: Any) -> None:
+        self._merge_with_defaults(
+            "simple_message",
+            lambda: SlackNotificationSimpleMessageConfig(
+                enabled=True,
+                message_template="Build Success",
+                color="good"
+            )
+        )
+
+class SlackNotificationOnFailureEventConfig(SlackNotificationEventConfig):
+    def model_post_init(self, __context: Any) -> None:
+        self._merge_with_defaults(
+            "simple_message",
+            lambda: SlackNotificationSimpleMessageConfig(
+                enabled=True,
+                message_template="Build Failed",
+                color="danger"
+            )
+        )
+
+class SlackNotificationOnUnstableEventConfig(SlackNotificationEventConfig):
+    def model_post_init(self, __context: Any) -> None:
+        self._merge_with_defaults(
+            "simple_message",
+            lambda: SlackNotificationSimpleMessageConfig(
+                enabled=True,
+                message_template="Build Unstable",
+                color="warning"
+            )
+        )
+
+class SlackNotificationOnExceptionEventConfig(SlackNotificationEventConfig):
+    def model_post_init(self, __context: Any) -> None:
+        self._merge_with_defaults(
+            "simple_message",
+            lambda: SlackNotificationSimpleMessageConfig(
+                enabled=True,
+                message_template="Build Failed ( Reason : ${err} )",
+                color="danger"
+            )
+        )
 
 class SlackNotificationsConfig(BaseModel):
     """Configuration model for Slack notifications."""
@@ -42,10 +99,10 @@ class SlackNotificationsConfig(BaseModel):
     on_failure: SlackNotificationOnFailureEventConfig = SlackNotificationOnFailureEventConfig()
     on_unstable: SlackNotificationOnUnstableEventConfig = SlackNotificationOnUnstableEventConfig()
     on_exception: SlackNotificationOnExceptionEventConfig = SlackNotificationOnExceptionEventConfig()
-    message_template : str = "String full_message = message + \" : ${env.JOB_NAME} - ${env.CHANGE_BRANCH} #${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)\""
     webhook_credential_id: Optional[str] = None
-    
-    @validator('channel')
+
+    @field_validator('channel')
+    @classmethod
     def validate_channel(cls, v):
         if not v.startswith('#') and not v.startswith('@'):
             raise ValueError('Channel must start with # or @')
