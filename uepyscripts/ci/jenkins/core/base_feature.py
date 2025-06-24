@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import re
 from typing import Any, Dict, List, Type
 from pydantic import BaseModel, ValidationError
 from mako.lookup import TemplateLookup
@@ -50,7 +51,7 @@ class BaseFeature(ABC):
         config_model = self.get_config_model()
         try:
             validated = config_model(**feature_config)
-            return validated.dict()
+            return validated
         except ValidationError as e:
             raise ValueError(f"Invalid config for feature '{self.feature_name}': {e}")
         
@@ -65,9 +66,10 @@ class BaseFeature(ABC):
 
         for block_type, block_value in blocks.blocks.items():
             try:
-                rendered = template.get_def(block_type).render(**context.__dict__)
+                rendered = template.get_def(block_type).render_unicode(**context.__dict__)
                 if rendered.strip():
-                    block_value.append(rendered.strip())
+                    cleaned = re.sub(r'\n\s*\n', '\n', rendered.strip())
+                    block_value.append(cleaned)
             except AttributeError as e:
                 # Block not defined in template - that's OK
                 pass

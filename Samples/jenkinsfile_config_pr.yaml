@@ -6,6 +6,8 @@ features:
       - "pipelineTriggers( [ cron( 'H 3 * * 1-6' ) ] )"
   slack_notifications:
     channel: "#ci-cd"
+    pre_build_step:
+      enabled: true
     on_success:
       enabled: true
     on_failure:
@@ -14,3 +16,22 @@ features:
       enabled: true
     on_exception:
       enabled: true
+  git:
+    use_simple_checkout: false
+    branch_name: "refs/heads/develop"
+    extensions:
+      CheckoutOption:
+        timeout: 120
+      SubmoduleOption:
+        disableSubmodules: false
+        parentCredentials: true
+        recursiveSubmodules: true
+        reference: ""
+        timeout: 120
+        trackingSubmodules: false
+      GitLFSPull:
+        enabled: true
+    user_remote_config:
+      credentials_id:
+        id: "CredentialId"
+        url: "git@github.com:Github/Octocat.git"

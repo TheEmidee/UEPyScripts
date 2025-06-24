@@ -47,15 +47,15 @@ class JenkinsfileGenerator:
                     global_values=global_values,
                     pipeline_name=config.name
                 )
-                
+
                 blocks = feature.render_blocks(context, self.template_lookup)
-                
+
                 # Merge blocks
                 all_blocks.merge_with(blocks)
-                
+
             except Exception as e:
                 raise RuntimeError(f"Failed to process feature '{feature.feature_name}': {e}")
-            
+
         self.render_final_jenkinsfile(all_blocks, config, global_values, output_path)
 
     def load_config(self, config_path: str) -> PipelineConfig:
@@ -66,7 +66,7 @@ class JenkinsfileGenerator:
                 return PipelineConfig(**yaml_contents)
         except Exception as e:
             raise ValueError(f"Failed to load config file '{config_path}': {e}")
-        
+
     def select_features(self, config: PipelineConfig) -> List[BaseFeature]:
         """Select and instantiate features based on configuration."""
         selected_features = []
@@ -75,7 +75,7 @@ class JenkinsfileGenerator:
             feature_instance = feature_class()
             if feature_instance.should_include(config.features):
                 selected_features.append(feature_instance)
-        
+
         return selected_features
     
     def render_final_jenkinsfile(self, blocks: GeneratedBlocks, config: PipelineConfig, global_values: Dict[str, Any], output_path: str) -> None:
@@ -84,15 +84,14 @@ class JenkinsfileGenerator:
             base_template = self.template_lookup.get_template(self.base_template_path)
         except Exception as e:
             raise FileNotFoundError(f"Base template not found: {self.base_template_path}")
-              
+
         try:
             d = {k: "\n".join(v or []) for k, v in blocks.blocks.items()}
-            rendered = base_template.render(**d)
-            cleaned = re.sub(r'\n\s*\n', '\n', rendered.strip())
+            rendered = base_template.render_unicode(**d).strip().encode('utf-8', 'replace')
 
         except Exception as e:
             raise RuntimeError(f"Failed to render base template: {e}")
         
         # Write to output file
-        with open(output_path, 'w') as f:
-            f.write(cleaned)
+        with open(output_path, 'wb') as f:
+            f.write(rendered)
