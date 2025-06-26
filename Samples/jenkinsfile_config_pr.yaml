@@ -6,17 +6,18 @@ features:
       - "pipelineTriggers( [ cron( 'H 3 * * 1-6' ) ] )"
   slack_notifications:
     channel: "#ci-cd"
-    //   use_simple_message: true
-    //   channel_override: "#sdsdf"
+    message_template: " : ${env.JOB_NAME} - ${env.CHANGE_BRANCH} #${env.BUILD_NUMBER} (<${env.BUILD_URL}|Open>)"
     on_success:
       blocks_message:
         enabled: true
-    // on_failure:
-    //   use_simple_message: true
-    // on_unstable:
-    //   use_simple_message: true
-    // on_exception:
-    //   use_simple_message: true
+        channel_override: "#so[pihjgosdfhj]"
+    on_failure:
+      simple_message:
+        enabled: false
+    on_unstable:
+      simple_message:
+        channel_override: "#fubar"
+        message: "Hello world"
   git:
     use_simple_checkout: false
     branch_name: "refs/heads/develop"

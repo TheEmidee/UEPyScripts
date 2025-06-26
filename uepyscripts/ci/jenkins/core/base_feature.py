@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
 import re
 from typing import Any, Dict, List, Type
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, PrivateAttr, ValidationError
 from mako.lookup import TemplateLookup
 
 from uepyscripts.ci.jenkins.core.pipeline_config import PipelineConfig
 from uepyscripts.ci.jenkins.core.generated_blocks import GeneratedBlocks, make_generated_blocks
 from uepyscripts.ci.jenkins.core.template_context import TemplateContext
 from uepyscripts.ci.jenkins.core.feature_registry import FeatureRegistry
+
+class FeatureConfig(BaseModel,ABC):
+    _accumulator: Dict[str, Any] = PrivateAttr(default_factory=dict)
 
 class BaseFeature(ABC):
     """Base class for all pipeline features"""

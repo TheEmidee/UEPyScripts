@@ -1,15 +1,28 @@
 <%def name="try_send_message(event, type='SlackNotificationEventConfig')">
+    
     % if event.simple_message.enabled:
         <%
-            channel_override = event.simple_message.channel_override
-            if channel_override.strip():
-                channel_override = f', "{channel_override}"'
-        %>
-        sendMessageToSlack( "${event.simple_message.message_template}", "${event.simple_message.color}" ${channel_override} )
-    % endif
+            channel = feature_config.channel
+            
+            if event.simple_message.channel_override.strip():
+                channel = event.simple_message.channel_override.strip()
 
+            feature_config._accumulator.setdefault("slack", dict()).update( { "generate_send_message" : True } )
+        %>
+        
+        sendMessageToSlack( channel: "${channel}", color: "${event.simple_message.color}", message: "${event.simple_message.message}" )
+    % endif
     % if event.blocks_message.enabled:
-        BLOCKS
+        <%
+            channel = feature_config.channel
+            
+            if event.blocks_message.channel_override.strip():
+                channel = event.blocks_message.channel_override.strip()
+
+            feature_config._accumulator.setdefault("slack", dict()).update( { "generate_send_blocks" : True } )
+        %>
+        
+        sendBlocksToSlack( channel: "${channel}", color: "${event.blocks_message.color}", blocks: [] )
     % endif
 </%def>
 
@@ -38,8 +51,20 @@ ${try_send_message(event=feature_config.on_exception)}
 </%def>
 
 <%def name="additional_functions()">
+
+<%
+slack_config = feature_config._accumulator.get("slack", {})
+%>
+
+% if slack_config.get("generate_send_message"):
 def sendMessageToSlack( String message, String color, String channel = "${feature_config.channel}" ) {
-    ${feature_config.message_template}
-    slackSend channel: channel, color: color, message: full_message
+    slackSend( channel: channel, color: color, message: message )
 }
+% endif
+
+% if slack_config.get("generate_send_blocks"):
+def sendBlocksToSlack( blocks, String color, String channel = "${feature_config.channel}" ) {
+    slackSend( channel: channel, color: color, blocks: blocks )
+}
+% endif
 </%def>

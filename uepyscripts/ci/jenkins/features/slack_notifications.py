@@ -2,7 +2,7 @@ from abc import ABC
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, field_validator
 
-from uepyscripts.ci.jenkins.core.base_feature import BaseFeature
+from uepyscripts.ci.jenkins.core.base_feature import BaseFeature, FeatureConfig
 
 class SlackNotificationMessageConfig(BaseModel,ABC):
     enabled: bool = False
@@ -11,11 +11,11 @@ class SlackNotificationMessageConfig(BaseModel,ABC):
 
 class SlackNotificationSimpleMessageConfig(SlackNotificationMessageConfig):
     enabled: bool = True
-    message_template: str = ""
+    message: str = ""
 
 class SlackNotificationBlocksMessageConfig(SlackNotificationMessageConfig):
     enabled: bool = False
-    blocks_template: str = ""
+    blocks: str = ""
 
 class SlackNotificationEventConfig(BaseModel,ABC):
     simple_message: SlackNotificationSimpleMessageConfig = SlackNotificationSimpleMessageConfig()
@@ -42,7 +42,15 @@ class SlackNotificationPreBuildStepEventConfig(SlackNotificationEventConfig):
             "simple_message",
             lambda: SlackNotificationSimpleMessageConfig(
                 enabled=True,
-                message_template="Build Started",
+                message="Build Started",
+                color="#0000FF"
+            )
+        )
+        self._merge_with_defaults(
+            "blocks_message",
+            lambda: SlackNotificationBlocksMessageConfig(
+                enabled=False,
+                blocks="[]",
                 color="#0000FF"
             )
         )
@@ -53,7 +61,15 @@ class SlackNotificationOnSuccessEventConfig(SlackNotificationEventConfig):
             "simple_message",
             lambda: SlackNotificationSimpleMessageConfig(
                 enabled=True,
-                message_template="Build Success",
+                message="Build Success",
+                color="good"
+            )
+        )
+        self._merge_with_defaults(
+            "blocks_message",
+            lambda: SlackNotificationBlocksMessageConfig(
+                enabled=False,
+                blocks="[]",
                 color="good"
             )
         )
@@ -64,7 +80,15 @@ class SlackNotificationOnFailureEventConfig(SlackNotificationEventConfig):
             "simple_message",
             lambda: SlackNotificationSimpleMessageConfig(
                 enabled=True,
-                message_template="Build Failed",
+                message="Build Failed",
+                color="danger"
+            )
+        )
+        self._merge_with_defaults(
+            "blocks_message",
+            lambda: SlackNotificationBlocksMessageConfig(
+                enabled=False,
+                blocks="[]",
                 color="danger"
             )
         )
@@ -75,7 +99,15 @@ class SlackNotificationOnUnstableEventConfig(SlackNotificationEventConfig):
             "simple_message",
             lambda: SlackNotificationSimpleMessageConfig(
                 enabled=True,
-                message_template="Build Unstable",
+                message="Build Unstable",
+                color="warning"
+            )
+        )
+        self._merge_with_defaults(
+            "blocks_message",
+            lambda: SlackNotificationBlocksMessageConfig(
+                enabled=False,
+                blocks="[]",
                 color="warning"
             )
         )
@@ -86,14 +118,23 @@ class SlackNotificationOnExceptionEventConfig(SlackNotificationEventConfig):
             "simple_message",
             lambda: SlackNotificationSimpleMessageConfig(
                 enabled=True,
-                message_template="Build Failed ( Reason : ${err} )",
+                message="Build Failed ( Reason : ${err} )",
+                color="danger"
+            )
+        )
+        self._merge_with_defaults(
+            "blocks_message",
+            lambda: SlackNotificationBlocksMessageConfig(
+                enabled=False,
+                blocks="[]",
                 color="danger"
             )
         )
 
-class SlackNotificationsConfig(BaseModel):
+class SlackNotificationsConfig(FeatureConfig):
     """Configuration model for Slack notifications."""
     channel: str
+    message_template: str = None
     pre_build_step : SlackNotificationPreBuildStepEventConfig = SlackNotificationPreBuildStepEventConfig()
     on_success : SlackNotificationOnSuccessEventConfig = SlackNotificationOnSuccessEventConfig()
     on_failure: SlackNotificationOnFailureEventConfig = SlackNotificationOnFailureEventConfig()

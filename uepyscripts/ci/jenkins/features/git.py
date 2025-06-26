@@ -2,7 +2,7 @@ from abc import ABC
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, field_validator, model_validator
 
-from uepyscripts.ci.jenkins.core.base_feature import BaseFeature
+from uepyscripts.ci.jenkins.core.base_feature import BaseFeature, FeatureConfig
 
 class CredentialsIdConfig(BaseModel):
     id: str
@@ -43,7 +43,7 @@ class CheckoutOptionConfig(GitExtension):
 def get_config_class_name(yaml_key : str) -> str:
     return globals()[ yaml_key + "Config" ]
 
-class GitConfig(BaseModel):
+class GitConfig(FeatureConfig):
     """Configuration model for the git properties."""
     use_simple_checkout : bool = True
     branch_name: Optional[str] = None
