@@ -11,6 +11,7 @@ features:
       blocks_message:
         enabled: true
         channel_override: "#so[pihjgosdfhj]"
+        blocks: "slack_failure_blocks"
     on_failure:
       simple_message:
         enabled: false
