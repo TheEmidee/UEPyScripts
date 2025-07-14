@@ -12,7 +12,7 @@ def resolve_engine_from_env_var(project: Project) -> Path:
     if key in os.environ:
         node_ue_root = os.environ[key]
         if node_ue_root:
-            path = Path(path)
+            path = Path(node_ue_root)
             if path.exists():
                 path = path.joinpath(project.engine_association)
                 if path.exists():
