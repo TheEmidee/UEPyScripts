@@ -59,7 +59,8 @@ def run(
         for arg in extra_arguments:
             arguments.append(arg)
 
-    engine.uat( arguments )
+    if engine.uat( arguments ) != 0:
+        raise RuntimeError("Error while running UAT")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Execute different tasks based on command-line arguments.")
