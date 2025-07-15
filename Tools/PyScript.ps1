@@ -41,8 +41,7 @@
 [CmdletBinding()]
 param (
     [string]$moduleName = "",
-    [hashtable]$arguments = @{},
-    [string]$stringArguments = "",
+    [string]$arguments = "",
     [switch]$Help
 )
 
@@ -94,21 +93,20 @@ function Convert-StringArgumentsToArray {
 function Run-PythonModule {
     param (
         [string]$moduleName,
-        [hashtable]$arguments,
-        [string]$stringArguments
+        [string]$arguments
     )
     try {
         $argArray = @()
-        if ($arguments.Count -gt 0) {
-            $arguments.GetEnumerator() | ForEach-Object {
-                $argArray += "--$($_.Key)"
-                $argArray += $_.Value
-            }
-        }
+        # if ($arguments.Count -gt 0) {
+        #     $arguments.GetEnumerator() | ForEach-Object {
+        #         $argArray += "--$($_.Key)"
+        #         $argArray += $_.Value
+        #     }
+        # }
         
         # Convert string arguments to array and merge
-        if (-not [string]::IsNullOrWhiteSpace($stringArguments)) {
-            $stringArgArray = Convert-StringArgumentsToArray -stringArgs $stringArguments
+        if (-not [string]::IsNullOrWhiteSpace($arguments)) {
+            $stringArgArray = Convert-StringArgumentsToArray -stringArgs $arguments
             $argArray += $stringArgArray
         }
 
@@ -128,7 +126,7 @@ try {
     Push-Location -Path $packageRoot
 
     Activate-VirtualEnvironment -venvPath ".venv\Scripts\Activate.ps1"
-    Run-PythonModule -moduleName $moduleName -arguments $arguments -stringArguments $stringArguments
+    Run-PythonModule -moduleName $moduleName -arguments $arguments
 } finally {
     Pop-Location
 }
