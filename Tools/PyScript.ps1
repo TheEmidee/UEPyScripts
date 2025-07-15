@@ -128,7 +128,7 @@ try {
     Push-Location -Path $packageRoot
 
     Activate-VirtualEnvironment -venvPath ".venv\Scripts\Activate.ps1"
-    Run-PythonModule -moduleName $moduleName -argument $arguments -stringArguments $stringArguments
+    Run-PythonModule -moduleName $moduleName -arguments $arguments -stringArguments $stringArguments
 } finally {
     Pop-Location
 }
