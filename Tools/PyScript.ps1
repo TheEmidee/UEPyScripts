@@ -2,6 +2,11 @@
 .SYNOPSIS
     Runs one of the python module of the UEPyScripts package
 
+.DESCRIPTION
+    This script runs the LevelStatsCollector commandlet to process a map and generate
+    metrics using a configurable grid system. It can adjust camera positions, heights,
+    and rotation angles for screenshot capture.
+
 .PARAMETER ModuleName
     Name of the module to execute
 
@@ -24,25 +29,13 @@
         "Skip_Test" : "True",
         "Skip_Validation_All" : "True"
         }
-
-.EXAMPLE
-    PyScript.ps1 `
-    -moduleName "uepyscripts.run.buildgraph" `
-    -stringArguments "--target 'My Buildgraph Target' --verbose"
-
-.EXAMPLE
-    PyScript.ps1 `
-    -moduleName "uepyscripts.run.buildgraph" `
-    -arguments @{ target = "My Target" } `
-    -stringArguments "--verbose --debug"
 "@;
 #>
 
 [CmdletBinding()]
 param (
     [string]$moduleName = "",
-    [string]$arguments = "",
-    [switch]$Help
+    [hashtable]$arguments = @{}
 )
 
 # If help is requested, show help and exit
@@ -64,57 +57,19 @@ function Activate-VirtualEnvironment {
     }
 }
 
-function Convert-StringArgumentsToArray {
-    param (
-        [string]$stringArgs
-    )
-    
-    if ([string]::IsNullOrWhiteSpace($stringArgs)) {
-        return @()
-    }
-    
-    # Simple parsing - splits on spaces but respects quoted strings
-    $argArray = @()
-    $matches = [regex]::Matches($stringArgs, '(?:"[^"]*"|''[^'']*''|[^\s]+)')
-    
-    foreach ($match in $matches) {
-        $value = $match.Value
-        # Remove outer quotes if present
-        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or 
-            ($value.StartsWith("'") -and $value.EndsWith("'"))) {
-            $value = $value.Substring(1, $value.Length - 2)
-        }
-        $argArray += $value
-    }
-    
-    return $argArray
-}
-
 function Run-PythonModule {
     param (
         [string]$moduleName,
-        [string]$arguments
+        [hashtable]$arguments
     )
     try {
         $argArray = @()
-        # if ($arguments.Count -gt 0) {
-        #     $arguments.GetEnumerator() | ForEach-Object {
-        #         $argArray += "--$($_.Key)"
-        #         $argArray += $_.Value
-        #     }
-        # }
-        
-        # Convert string arguments to array and merge
-        if (-not [string]::IsNullOrWhiteSpace($arguments)) {
-            $stringArgArray = Convert-StringArgumentsToArray -stringArgs $arguments
-            $argArray += $stringArgArray
+        $arguments.GetEnumerator() | ForEach-Object {
+            $argArray += "--$($_.Key)"
+            $argArray += $_.Value
         }
 
-        if ($argArray.Count -gt 0) {
-            & python -m $moduleName $argArray
-        } else {
-            & python -m $moduleName
-        }
+        & python -m $moduleName $argArray
     } catch {
         Write-Error "Failed to run Python module: $_"
         exit 1
@@ -126,7 +81,7 @@ try {
     Push-Location -Path $packageRoot
 
     Activate-VirtualEnvironment -venvPath ".venv\Scripts\Activate.ps1"
-    Run-PythonModule -moduleName $moduleName -arguments $arguments
+    Run-PythonModule -moduleName $moduleName -argument $arguments
 } finally {
     Pop-Location
 }
