@@ -71,6 +71,10 @@ if __name__ == '__main__':
 
     target = args.target
 
+    logger.debug(f"Target : {args.target}")
+    logger.debug(f"Properties : {args.properties}")
+    logger.debug(f"Extra Arguments : {args.extra_arguments}")
+
     properties = json.loads(args.properties) if args.properties else {}
     extra_arguments = json.loads(args.extra_arguments) if args.extra_arguments else []
 
