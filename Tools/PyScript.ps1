@@ -45,18 +45,6 @@ if ($Help)
     return
 }
 
-function Activate-VirtualEnvironment {
-    param (
-        [string]$venvPath
-    )
-    if (Test-Path $venvPath) {
-        & $venvPath
-    } else {
-        Write-Error "Virtual environment activation script not found at $venvPath"
-        exit 1
-    }
-}
-
 function Run-PythonModule {
     param (
         [string]$moduleName,
@@ -80,7 +68,8 @@ try {
     $packageRoot = (Join-Path $PSScriptRoot -ChildPath "../")
     Push-Location -Path $packageRoot
 
-    Activate-VirtualEnvironment -venvPath ".venv\Scripts\Activate.ps1"
+    & ( Join-Path -Path $packageRoot -ChildPath "setup_venv.ps1" )
+
     Run-PythonModule -moduleName $moduleName -argument $arguments
 } finally {
     Pop-Location
