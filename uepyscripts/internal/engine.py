@@ -5,7 +5,6 @@ from packaging.version import Version
 from uepyscripts.internal.engine_resolver import resolve_engine_path
 
 import json
-import io
 import subprocess
 
 class Engine:

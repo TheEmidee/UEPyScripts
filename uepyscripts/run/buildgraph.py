@@ -2,11 +2,14 @@ import argparse
 import json
 
 from pathlib import Path
+import re
+import shlex
 from typing import Any, Dict, List
-from uepyscripts import logger
-from uepyscripts.context import engine
-from uepyscripts.context import project
-from uepyscripts.context import config
+
+from .. import logger
+from ..context import engine
+from ..context import project
+from ..context import config
 
 def run(
     target: str,
@@ -17,9 +20,6 @@ def run(
     logger.info(f"Run Buildgraph - Target : {target}")
     logger.debug(f"Extra Properties : {properties}")
     logger.debug(f"Extra Parameters : {extra_arguments}")
-
-    if target == "":
-        raise Exception("You must give a target to buildgraph")
 
     buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
     logger.debug( f"Buildgraph XML path : {buildgraph_path}")
@@ -33,7 +33,11 @@ def run(
 
     arguments = [ "BuildGraph" ]
     arguments.append(f"-script=\"{buildgraph_path}\"")
-    arguments.append(f"-target=\"{target}\"")
+
+    # We can execute buildgraph without a target if the SingleNode argument is set
+    if target:
+        arguments.append(f"-target=\"{target}\"")
+
     arguments.append(f"-Project=\"{project.uproject_path}\"")
 
     automation_scripts_path = config["Project"]["AutomationScriptsDirectory"]
@@ -104,14 +108,15 @@ def extract_config_values(config_data: Dict[str, Any]) -> tuple[str, Dict[str, s
     
     return target, properties, extra_arguments
 
-def parse_arguments():
+def parse_arguments(argv=None):
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Execute different tasks based on command-line arguments."
+        description="Execute a buildgraph task based on a target and properties."
     )
     parser.add_argument(
         "--target", 
         type=str, 
+        default="",
         help="The target to run in the buildgraph file"
     )
     parser.add_argument(
@@ -141,11 +146,13 @@ def parse_arguments():
         default="", 
         help="Path to a JSON file containing the target, properties, and extra arguments"
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 def validate_config(target: str, properties: Dict[str, str], extra_arguments: List[str]) -> None:
     """Validate the configuration values."""
-    if not target:
+    pattern = r'-SingleNode="[^"]*"'
+
+    if not target and not any( re.search(pattern, item) for item in extra_arguments ):
         raise ValueError("Target is required")
     
     if not isinstance(properties, dict):
@@ -153,10 +160,9 @@ def validate_config(target: str, properties: Dict[str, str], extra_arguments: Li
     
     if not isinstance(extra_arguments, list):
         raise TypeError("Extra arguments must be a list")
-
-
-if __name__ == '__main__':
-    args = parse_arguments()
+    
+def main(argv=None):
+    args = parse_arguments(argv)
     
     target = ""
     properties = {}
@@ -181,7 +187,13 @@ if __name__ == '__main__':
         logger.debug(f"Extra Arguments from command line: {args.extra_arguments}")
         extra_arguments = parse_json_argument(args.extra_arguments, 'extra_arguments', [])
 
-    string_arguments = args.string_arguments.split()
+    def split_string_arguments(string_arguments: str) -> List[str]:
+        pattern = r'[^\s"]+="[^"]*"|[^\s"]+'
+        return re.findall(pattern, string_arguments)
+
+    # Split string arguments into a list. The regex captures quoted strings and unquoted words.
+    # This allows for arguments like --arg="value with spaces" to be handled correctly
+    string_arguments = split_string_arguments(args.string_arguments)
     extra_arguments += string_arguments
 
     try:
@@ -199,3 +211,6 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         raise e
+
+if __name__ == '__main__':
+    main()

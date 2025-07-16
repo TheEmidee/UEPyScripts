@@ -27,7 +27,7 @@ class Project:
 
         with open(self.uproject_path, 'r') as f:
             uproject_json = json.load(f)
-            self.engine_association = uproject_json["EngineAssociation"]        
+            self.engine_association = uproject_json["EngineAssociation"]
 
     def __str__(self):
         return f"""
