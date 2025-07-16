@@ -2,6 +2,21 @@
 $venvName = ".venv"
 $venvPath = Join-Path -Path $PSScriptRoot -ChildPath $venvName
 
+function Activate-VirtualEnvironment
+{
+    Write-Host "Activating Python virtual environment at $($venvPath)"
+    
+    $activateScript = Join-Path -Path $venvPath -ChildPath "Scripts\Activate.ps1"
+    
+    if ( Test-Path -Path $activateScript ) {
+        & $activateScript
+        Write-Host "Virtual environment activated."
+    } else {
+        Write-Error "Activation script not found at $($activateScript)"
+        exit 1
+    }
+}
+
 function Initialize-PythonVEnv
 {
     Write-Host "Create python virtual environment in $($venvPath)"
@@ -15,9 +30,7 @@ function Initialize-PythonVEnv
     if ( Test-Path -Path $venvPath ) {
         Write-Host "Python virtual environment '$($venvName)' has been created successfully." -ForegroundColor Green
 
-        # Activate the virtual environment
-        $activateScript = Join-Path -Path $venvPath -ChildPath "Scripts\Activate.ps1"
-        & $activateScript
+        Activate-VirtualEnvironment
 
         # Upgrade pip to the latest version
         Write-Host "Upgrading pip to the latest version..."
@@ -49,6 +62,7 @@ function Test-PythonVirtualEnvironment
         Initialize-PythonVEnv
     } else {
         Write-Host "Python virtual environment found at $venvPath" -ForegroundColor Green
+        Activate-VirtualEnvironment
     }
 }
 
