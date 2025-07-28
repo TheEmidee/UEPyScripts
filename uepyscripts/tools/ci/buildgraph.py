@@ -116,7 +116,7 @@ def main(argv=None):
     
     logger.debug(f"Running ci.buildgraph with build tag: {args.build_tag} on machine {socket.gethostname()}")
 
-    shared_storage_dir = Path(f"{config["Jenkins"]["BuildgraphSharedStoragePath"]}\{args.build_tag}")
+    shared_storage_dir = Path(config["Jenkins"]["BuildgraphSharedStoragePath"]) / args.build_tag
     logger.debug(f"Shared storage directory: {shared_storage_dir}")
 
     remove_task_shared_storage_dir(shared_storage_dir, args.target)
