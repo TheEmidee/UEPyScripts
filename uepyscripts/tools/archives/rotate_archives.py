@@ -81,7 +81,7 @@ def cleanup_old_directories(parent_dir: Path, keep_count: int):
     print(f"\nRemoving {len(dirs_to_remove)} old directories:")
     for d in dirs_to_remove:
         try:
-            # shutil.rmtree(d)
+            shutil.rmtree(d)
             print(f"  - Removed: {d.name}")
         except Exception as e:
             print(f"  - Failed to remove {d.name}: {e}")
@@ -137,6 +137,8 @@ def main():
     if not source_path.is_dir():
         print(f"Error: '{source_path}' is not a directory.")
         sys.exit(1)
+
+    print(f"Directory path : {source_path.name}")
 
     # Get parent directory and current date name
     parent_dir = source_path.parent
