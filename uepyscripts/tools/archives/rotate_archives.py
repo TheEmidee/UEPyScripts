@@ -89,7 +89,7 @@ def cleanup_old_directories(parent_dir: Path, keep_count: int):
 
 def write_output_file(output_path: Path, renamed_folder_path: Path):
     """
-    Write content to the specified output file.
+    Writes the path of the last folder in the output path.
 
     Args:
         output_path (Path): Path to the output file
@@ -108,7 +108,9 @@ def write_output_file(output_path: Path, renamed_folder_path: Path):
         print(f"Warning: Failed to write to output file '{output_path}': {e}")
 
 
-def main():
+def parse_arguments():
+    """Parse command line arguments."""
+
     parser = argparse.ArgumentParser(
         description="Rename directory to current date and cleanup old directories"
     )
@@ -124,7 +126,10 @@ def main():
         help="Optional path to text file where the new directory name will be written",
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+def main():
+    args = parse_arguments()
 
     # Convert to Path object
     source_path = Path(args.directory_path).resolve()
