@@ -1,6 +1,8 @@
 # This script sets up a Python virtual environment in the parent directory and installs dependencies from requirements.txt
 $venvName = ".venv"
 $venvPath = Join-Path -Path $PSScriptRoot -ChildPath $venvName
+$requirementsPath = Join-Path -Path $PSScriptRoot -ChildPath "requirements.txt"
+$lastInstallPath = Join-Path -Path $venvPath -ChildPath ".last_requirements_install"
 
 function Activate-VirtualEnvironment
 {
@@ -15,6 +17,62 @@ function Activate-VirtualEnvironment
         Write-Error "Activation script not found at $($activateScript)"
         exit 1
     }
+}
+
+function Install-Requirements
+{
+    param(
+        [string]$Reason = "Installing dependencies"
+    )
+    
+    if ( Test-Path $requirementsPath ) {
+        Write-Host "$Reason from requirements.txt..." -ForegroundColor Yellow
+        
+        # Upgrade pip to the latest version
+        Write-Host "Upgrading pip to the latest version..."
+        python -m pip install --upgrade pip
+        
+        # Install/update dependencies
+        pip install -r $requirementsPath
+        
+        # Record the timestamp of this installation
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Set-Content -Path $lastInstallPath -Value $timestamp
+        Write-Host "Dependencies installation completed at $timestamp" -ForegroundColor Green
+    } else {
+        Write-Warning "requirements.txt not found at $requirementsPath"
+    }
+}
+
+function Test-RequirementsNeedUpdate
+{
+    # If requirements.txt doesn't exist, no need to update
+    if ( -not (Test-Path $requirementsPath) ) {
+        return $false
+    }
+    
+    # If we've never installed requirements, we need to install
+    if ( -not (Test-Path $lastInstallPath) ) {
+        Write-Host "No previous requirements installation found." -ForegroundColor Yellow
+        return $true
+    }
+    
+    # Get the last modification time of requirements.txt
+    $requirementsModified = (Get-Item $requirementsPath).LastWriteTime
+    
+    # Get the timestamp of last installation
+    $lastInstallTime = Get-Content $lastInstallPath | Get-Date
+    
+    # Compare timestamps
+    if ( $requirementsModified -gt $lastInstallTime ) {
+        Write-Host "requirements.txt has been modified since last installation." -ForegroundColor Yellow
+        Write-Host "  Requirements file: $($requirementsModified)"
+        Write-Host "  Last installation: $($lastInstallTime)"
+        return $true
+    }
+    
+    Write-Host "Requirements are up to date (last installed: $lastInstallTime)" -ForegroundColor Green
+    return $false
 }
 
 function Initialize-PythonVEnv
@@ -32,19 +90,8 @@ function Initialize-PythonVEnv
 
         Activate-VirtualEnvironment
 
-        # Upgrade pip to the latest version
-        Write-Host "Upgrading pip to the latest version..."
-        python -m pip install --upgrade pip
-
-        # Install dependencies from requirements.txt
-        $requirementsPath = Join-Path -Path $PsScriptRoot -ChildPath "requirements.txt"
-
-        if ( Test-Path $requirementsPath ) {
-            Write-Host "Installing dependencies from requirements.txt..."
-            pip install -r $requirementsPath
-        } else {
-            Write-Host "requirements.txt not found."
-        }
+        # Install initial requirements
+        Install-Requirements -Reason "Installing initial dependencies"
 
         Write-Host "Virtual environment setup complete."
     } else {
@@ -63,6 +110,11 @@ function Test-PythonVirtualEnvironment
     } else {
         Write-Host "Python virtual environment found at $venvPath" -ForegroundColor Green
         Activate-VirtualEnvironment
+        
+        # Check if requirements need to be updated
+        if ( Test-RequirementsNeedUpdate ) {
+            Install-Requirements -Reason "Updating dependencies"
+        }
     }
 }
 
