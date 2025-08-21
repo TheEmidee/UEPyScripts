@@ -3,20 +3,24 @@
 S3 Folder Upload Script
 
 Uploads a local folder to an S3 bucket with collision detection and cleanup.
+Generates download URLs for all uploaded files.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
-import threading
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from tqdm import tqdm
+import threading
+from urllib.parse import quote
+
 
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Upload a folder to S3 with cleanup of old versions'
+        description='Upload a folder to S3 with cleanup of old versions and generate download URLs'
     )
     parser.add_argument(
         '--local_folder',
@@ -28,10 +32,14 @@ def parse_arguments():
     )
     parser.add_argument(
         '--destination_folder',
-        help='Destination folder name in the S3 bucket'
+        help='Base destination folder in the S3 bucket (local folder name will be appended)'
     )
     parser.add_argument(
-        '--keep',
+        '--output_file',
+        help='Path to output file where download URLs will be written'
+    )
+    parser.add_argument(
+        '--keep_count',
         type=int,
         default=5,
         help='Number of folders to keep after cleanup (default: 5)'
@@ -39,7 +47,7 @@ def parse_arguments():
     parser.add_argument(
         '--force',
         action='store_true',
-        help='Overwrite existing folder if it exists'
+        help='Overwrite existing folder (otherwise auto-increment)'
     )
     parser.add_argument(
         '--region',
@@ -47,10 +55,12 @@ def parse_arguments():
     )
     parser.add_argument(
         '--access_key',
+        required=True,
         help='AWS access key ID'
     )
     parser.add_argument(
         '--secret_key',
+        required=True,
         help='AWS secret access key'
     )
     parser.add_argument(
@@ -62,20 +72,18 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def create_s3_client(region=None, access_key=None, secret_key=None):
+def create_s3_client(access_key, secret_key, region=None):
     """Create and return an S3 client."""
     try:
-        # Use provided access key and secret key
         s3_client = boto3.client(
             's3',
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=region
         )
-        
         return s3_client
     except NoCredentialsError:
-        print("Error: AWS credentials not found. Please configure your credentials or provide --access-key and --secret-key.")
+        print("Error: Invalid AWS credentials.")
         sys.exit(1)
     except Exception as e:
         print(f"Error creating S3 client: {e}")
@@ -99,6 +107,26 @@ def folder_exists_in_bucket(s3_client, bucket_name, folder_name):
             print(f"Error checking folder existence: {e}")
             sys.exit(1)
 
+
+def find_available_folder_name(s3_client, bucket_name, base_folder_name):
+    """Find an available folder name by auto-incrementing if needed."""
+    if not folder_exists_in_bucket(s3_client, bucket_name, base_folder_name):
+        return base_folder_name
+    
+    # Find the next available increment
+    counter = 1
+    while True:
+        candidate_name = f"{base_folder_name}_{counter:02d}"
+        if not folder_exists_in_bucket(s3_client, bucket_name, candidate_name):
+            return candidate_name
+        counter += 1
+        
+        # Safety check to prevent infinite loop
+        if counter > 999:
+            print(f"Error: Too many folders with base name '{base_folder_name}' (reached limit of 999)")
+            sys.exit(1)
+
+
 class ProgressCallback:
     """Callback class for tracking upload progress."""
     
@@ -116,17 +144,34 @@ class ProgressCallback:
                 self.pbar.update(bytes_amount)
 
 
-def upload_folder_to_s3(s3_client, local_path: Path, bucket_name : str, destination_folder : str, show_progress: bool = True):
-    """Upload all files in a local folder to S3."""
-
-    folder_name = f"{destination_folder}/{local_path.name}".replace('\\', '/')
+def generate_download_url(bucket_name, s3_key, region=None):
+    """Generate a direct download URL for an S3 object."""
+    if region and region != 'us-east-1':
+        base_url = f"https://{bucket_name}.s3.{region}.amazonaws.com"
+    else:
+        base_url = f"https://{bucket_name}.s3.amazonaws.com"
     
-    if folder_exists_in_bucket(s3_client, bucket_name, folder_name):
-        print(f"Error: Folder '{destination_folder}' already exists in bucket '{bucket_name}'.")
-        print("Use --force to overwrite the existing folder.")
+    # URL encode the key to handle special characters
+    encoded_key = quote(s3_key, safe='/')
+    return f"{base_url}/{encoded_key}"
+
+
+def upload_folder_to_s3(s3_client, local_folder, bucket_name, destination_folder, region=None, show_progress=True):
+    """Upload all files in a local folder to S3 and return list of uploaded files."""
+    local_path = Path(local_folder)
+    
+    if not local_path.exists():
+        print(f"Error: Local folder '{local_folder}' does not exist.")
+        sys.exit(1)
+    
+    if not local_path.is_dir():
+        print(f"Error: '{local_folder}' is not a directory.")
         sys.exit(1)
     
     uploaded_files = 0
+    uploaded_objects = []  # Store info about uploaded files
+    
+    # Collect all files first to show overall progress
     all_files = []
     total_size = 0
     
@@ -137,8 +182,8 @@ def upload_folder_to_s3(s3_client, local_path: Path, bucket_name : str, destinat
             total_size += file_size
     
     if not all_files:
-        print(f"No files found in '{local_path}'")
-        return False
+        print(f"No files found in '{local_folder}'")
+        return False, []
     
     print(f"Found {len(all_files)} files ({total_size / (1024*1024):.1f} MB) to upload")
     
@@ -164,7 +209,7 @@ def upload_folder_to_s3(s3_client, local_path: Path, bucket_name : str, destinat
     for file_path, file_size in all_files:
         # Calculate relative path from the base folder
         relative_path = file_path.relative_to(local_path)
-        s3_key = f"{folder_name}/{relative_path}".replace('\\', '/')
+        s3_key = f"{destination_folder}/{relative_path}".replace('\\', '/')
         
         try:
             if show_progress:
@@ -197,6 +242,15 @@ def upload_folder_to_s3(s3_client, local_path: Path, bucket_name : str, destinat
             
             uploaded_files += 1
             
+            # Store uploaded file info
+            download_url = generate_download_url(bucket_name, s3_key, region)
+            uploaded_objects.append({
+                'local_path': str(file_path),
+                's3_key': s3_key,
+                'download_url': download_url,
+                'file_size': file_size
+            })
+            
         except ClientError as e:
             if show_progress and file_pbar:
                 file_pbar.close()
@@ -207,7 +261,26 @@ def upload_folder_to_s3(s3_client, local_path: Path, bucket_name : str, destinat
         overall_pbar.close()
     
     print(f"Successfully uploaded {uploaded_files} files to s3://{bucket_name}/{destination_folder}/")
-    return uploaded_files > 0
+    return uploaded_files > 0, uploaded_objects
+
+
+def write_download_urls(uploaded_objects, output_file):
+    """Write download URLs to output file in format 'URL : FileName'."""
+    try:
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            for obj in uploaded_objects:
+                # Extract just the filename from the local path
+                filename = Path(obj['local_path']).name
+                f.write(f"{obj['download_url']} : {filename}\n")
+        
+        print(f"Download URLs written to: {output_file}")
+        print(f"Total URLs generated: {len(uploaded_objects)}")
+        
+    except Exception as e:
+        print(f"Error writing download URLs to file: {e}")
 
 
 def get_folders_in_bucket(s3_client, bucket_name):
@@ -285,34 +358,51 @@ def cleanup_old_folders(s3_client, bucket_name, keep_count):
 def main():
     """Main function."""
     args = parse_arguments()
-
-    local_path = Path(args.local_folder)
     
-    if not local_path.exists():
-        print(f"Error: Local folder '{local_path}' does not exist.")
-        sys.exit(1)
+    # Create S3 client
+    s3_client = create_s3_client(args.access_key, args.secret_key, args.region)
     
-    if not local_path.is_dir():
-        print(f"Error: '{local_path}' is not a directory.")
-        sys.exit(1)
-
-    print(f"Local folder '{local_path}'.")
+    # Construct the full destination path
+    local_folder_name = Path(args.local_folder).name
+    full_destination = f"{args.destination_folder}/{local_folder_name}".replace('\\', '/')
     
-    s3_client = create_s3_client(args.region, args.access_key, args.secret_key)
-    success = upload_folder_to_s3(
-        s3_client,
-        local_path,
-        args.bucket_name,
-        args.destination_folder,
+    # Handle folder name collision
+    final_destination = full_destination
+    
+    if folder_exists_in_bucket(s3_client, args.bucket_name, full_destination):
+        if args.force:
+            print(f"Folder '{full_destination}' exists, but --force specified. Overwriting...")
+            final_destination = full_destination
+        else:
+            final_destination = find_available_folder_name(
+                s3_client, 
+                args.bucket_name, 
+                full_destination
+            )
+            print(f"Folder '{full_destination}' exists. Using '{final_destination}' instead.")
+    else:
+        print(f"Using destination folder: '{final_destination}'")
+    
+    # Upload the folder
+    success, uploaded_objects = upload_folder_to_s3(
+        s3_client, 
+        args.local_folder, 
+        args.bucket_name, 
+        final_destination,
+        args.region,
         show_progress=not args.no_progress
     )
     
     if not success:
         print("Upload failed or no files were uploaded.")
         sys.exit(1)
+
+    if args.output_file:
+        # Write download URLs to output file
+        write_download_urls(uploaded_objects, args.output_file)
     
     # Cleanup old folders
-    cleanup_old_folders(s3_client, args.bucket_name, args.keep)
+    cleanup_old_folders(s3_client, args.bucket_name, args.keep_count)
     
     print("Script completed successfully!")
 
