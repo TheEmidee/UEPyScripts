@@ -121,7 +121,7 @@ def parse_arguments():
         help="Number of directories to keep in the parent folder",
     )
     parser.add_argument(
-        "--output_file",
+        "--folder_output_file_name",
         "-o",
         help="Optional path to text file where the new directory name will be written",
     )
@@ -158,8 +158,8 @@ def main():
         source_path.rename(new_path)
         print(f"Successfully renamed '{source_path.name}' to '{new_name}'")
 
-        if args.output_file:
-            write_output_file(args.output_file, new_path)
+        if args.folder_output_file_name:
+            write_output_file(args.folder_output_file_name, new_path)
     except Exception as e:
         print(f"Error renaming directory: {e}")
         sys.exit(1)

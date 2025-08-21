@@ -295,6 +295,8 @@ def main():
     if not local_path.is_dir():
         print(f"Error: '{local_path}' is not a directory.")
         sys.exit(1)
+
+    print(f"Local folder '{local_path}'.")
     
     s3_client = create_s3_client(args.region, args.access_key, args.secret_key)
     success = upload_folder_to_s3(
