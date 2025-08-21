@@ -13,10 +13,6 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from tqdm import tqdm
 
-from ... import logger
-from ...context import config
-from ...context import project
-
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
