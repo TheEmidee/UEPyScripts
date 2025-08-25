@@ -338,6 +338,10 @@ def cleanup_old_folders(s3_client, bucket_name, keep_count):
     """Remove old folders, keeping only the specified number of most recent ones."""
     folders = get_folders_in_bucket(s3_client, bucket_name)
     
+    if keep_count <= 0:
+        print("Warning: keep_count must be positive. No cleanup performed.")
+        return
+
     if len(folders) <= keep_count:
         print(f"Found {len(folders)} folders, keeping all (limit: {keep_count})")
         return
