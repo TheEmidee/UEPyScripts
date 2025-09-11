@@ -13,6 +13,7 @@ class Engine:
                 self, 
                 path : Path,
                 capture_output : bool,
+                wait_process : bool = True,
                 extra_args : list[str] = []
                 ):
             if not path.exists():
@@ -20,6 +21,7 @@ class Engine:
             
             self.path = path.resolve()
             self.capture_output = capture_output
+            self.wait_process = wait_process
             self.extra_args = extra_args
 
         def run(
@@ -60,6 +62,9 @@ class Engine:
                         stdout=subprocess.PIPE
                     )
 
+                    if not self.wait_process:
+                        return 0
+
                     return process.wait()
 
             except subprocess.CalledProcessError as e:
@@ -78,7 +83,7 @@ class Engine:
         self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"), True )
         self.ubt_path = self.Runner(self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"), True,[str(self.project.uproject_path)])
         self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"), True)
-        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False,[str(self.project.uproject_path)])
+        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False, False, [str(self.project.uproject_path)])
 
     def uat(self, args: list[str] = None) -> int:
         return self.uat_path.run(args)
