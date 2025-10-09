@@ -40,18 +40,21 @@ def run(
 
     arguments.append(f"-Project=\"{project.uproject_path}\"")
 
-    automation_scripts_path = config["Project"]["AutomationScriptsDirectory"]
-    if automation_scripts_path == "":
+    automation_scripts_paths = config["Project"]["AutomationScriptsDirectories"]
+    if automation_scripts_paths == "":
         logger.info("No automation scripts directory is set")
     else:
-        automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
-        if not automation_scripts_path.exists():
-            raise Exception(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
+        automation_scripts_paths = automation_scripts_paths.split('+')
 
-        logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
-        arguments.append(f"-ScriptDir={automation_scripts_path}")
+        for automation_scripts_path in automation_scripts_paths:
+            automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
+            if not automation_scripts_path.exists():
+                raise Exception(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
 
-    shared_properties = dict(pair.split('=') for pair in config["Project"]["BuildgraphSharedProperties"].split(','))
+            logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
+            arguments.append(f"-ScriptDir={automation_scripts_path}")
+
+    shared_properties = dict(pair.split('=') for pair in config["Project"]["BuildgraphSharedProperties"].split('+'))
 
     if shared_properties is not None:
         for key, value in shared_properties.items():
