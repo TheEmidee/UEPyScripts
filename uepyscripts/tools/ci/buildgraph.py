@@ -84,6 +84,8 @@ def try_delete_local_buildgraph_folder(build_tag : str) -> None:
 
     def write_tag_to_file():
         logger.info(f"Writing build tag {build_tag} to {ci_task_version_file}")
+        Path(buildgraph_local_folder).mkdir(parents=True, exist_ok=True)
+
         with open(ci_task_version_file, "w") as file:
             file.write(build_tag)
 
