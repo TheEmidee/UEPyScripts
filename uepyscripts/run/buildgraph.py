@@ -49,7 +49,8 @@ def run(
         for automation_scripts_path in automation_scripts_paths:
             automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
             if not automation_scripts_path.exists():
-                raise Exception(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
+                logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
+                continue
 
             logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
             arguments.append(f"-ScriptDir={automation_scripts_path}")
