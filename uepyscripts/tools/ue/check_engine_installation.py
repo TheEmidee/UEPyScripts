@@ -19,7 +19,9 @@ except Exception as e:
         engine_source = resolve_engine_source(project)
         engine_destination = resolve_engine_destination(project)
         
-        logger.info(f"Copy the engine '{project.engine_association}' to '{engine_destination}'...")
+        logger.info(f"Copy the engine from '{engine_source.source_file}' to '{engine_destination}'")
+
+        engine_destination.mkdir(parents=True, exist_ok=True)        
         engine_source.copy_engine_to(engine_destination)
     except Exception as e:
         logger.fatal(f"Error when installing the engine: {e}")
