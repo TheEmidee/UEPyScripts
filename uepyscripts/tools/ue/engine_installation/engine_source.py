@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
-import os
 from pathlib import Path
-
-import boto3
-import tqdm
+from urllib.parse import quote
 
 from .... import logger
 from ....internal.project import Project
 from ....internal.config import Config, resolve_config
-from ....tools.helpers import is_engine_from_egs
+from ....tools.helpers import copy_with_robocopy, is_engine_from_egs
+from ....tools.s3.s3_client import S3Client
 
 class EngineSource(ABC):
     _registry = {}
@@ -32,14 +30,17 @@ class EngineSource(ABC):
         pass
 
     @abstractmethod
-    def copy_engine_to(self, destination: Path):
+    def copy_engine_to(self, destination_folder: Path):
         pass
+
+    def get_source_full_path(self) -> Path:
+        return self.source_file
 
 class EngineSourceEGS(EngineSource):
     def can_use(self) -> bool:
         return is_engine_from_egs(self.project.engine_association)
     
-    def copy_engine_to(self, destination: Path):
+    def copy_engine_to(self, destination_folder: Path):
         raise Exception("Engine installation via Epic Games Launcher is not supported. Please open the Epic Games Launcher and install the engine version manually.")
 
 class EngineSourceLocal(EngineSource):
@@ -67,41 +68,24 @@ class EngineSourceLocal(EngineSource):
 
         return False
 
-    def copy_engine_to(self, destination: Path):    
-        total_size = os.path.getsize(self.source_file)
-
-        destination = destination.joinpath(self.source_file.name)
-    
-        with open(self.source_file, 'rb') as src, open(destination, 'wb') as dst:
-            # Create progress bar
-            with tqdm.tqdm(total=total_size, unit='B', unit_scale=True, desc=f'Copying {os.path.basename(self.source_file)}') as pbar:
-                # Copy in chunks
-                chunk_size = 1024 * 1024  # 1MB chunks
-                while True:
-                    chunk = src.read(chunk_size)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
-                    pbar.update(len(chunk))
+    def copy_engine_to(self, destination_folder: Path):
+        copy_with_robocopy(self.source_file, destination_folder)
 
 class EngineSourceAWS(EngineSource):
-    def can_use(self) -> bool:
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=self.config["EngineSource.AWS"]["AWS_AccessKey"],
-            aws_secret_access_key=self.config["EngineSource.AWS"]["AWS_SecretKey"],
-            region_name=self.config["EngineSource.AWS"]["AWS_Region"]
+    def __init__(self, project, config):
+        super().__init__(project, config)
+        self.s3_client = S3Client(
+            access_key=self.config["EngineSource.AWS"]["AWS_AccessKey"],
+            secret_key=self.config["EngineSource.AWS"]["AWS_SecretKey"],
+            region=self.config["EngineSource.AWS"]["AWS_Region"]
         )
-    
-        paginator = s3_client.get_paginator('list_objects_v2')
-        pages = paginator.paginate(Bucket=self.config["EngineSource.AWS"]["AWS_BucketName"], Prefix=self.project.engine_association)
         
-        files = []
-        for page in pages:
-            if 'Contents' in page:
-                # Filter out directories (keys ending with '/')
-                files.extend([obj['Key'] for obj in page['Contents'] 
-                            if obj['Key'].endswith(('.zip', '.7z'))])
+    def can_use(self) -> bool:
+        files = self.s3_client.get_bucket_files(
+            bucket_name=self._get_bucket_name(),
+            prefix=self.project.engine_association,
+            filter_func=lambda obj: obj['Key'].endswith(('.zip', '.7z'))
+        )
         
         if not files:
             logger.info(f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket '{self.config['EngineSource.AWS']['AWS_BucketName']}'")
@@ -112,8 +96,23 @@ class EngineSourceAWS(EngineSource):
         
         return True
     
-    def copy_engine_to(self, destination: Path):    
-        pass
+    def copy_engine_to(self, destination_folder: Path):    
+        self.s3_client.download_file(
+            bucket_name=self._get_bucket_name(),
+            key=str(self.source_file),
+            local_folder=destination_folder,
+            show_progress_bar=True
+        )
+
+    def _get_bucket_name(self) -> str:
+        return self.config["EngineSource.AWS"]["AWS_BucketName"]
+
+    def get_source_full_path(self) -> Path:
+        base_url = f"https://{self._get_bucket_name()}.s3.amazonaws.com"
+    
+        # URL encode the key to handle special characters
+        encoded_key = quote(str(self.source_file), safe='/')
+        return Path(f"{base_url}/{encoded_key}")
 
 def resolve_engine_source(project: Project) -> EngineSource:
     config = resolve_config(project)
