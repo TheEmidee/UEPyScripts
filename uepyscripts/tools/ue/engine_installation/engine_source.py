@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from urllib.parse import quote
+import winreg
 
 from .... import logger
 from ....internal.project import Project
 from ....internal.config import Config, resolve_config
 from ....tools.helpers import copy_with_robocopy, is_engine_from_egs
 from ....tools.s3.s3_client import S3Client
+from ....tools.winreg import write_registry_value
 
 class EngineSource(ABC):
     _registry = {}
@@ -35,6 +37,10 @@ class EngineSource(ABC):
 
     def get_source_full_path(self) -> Path:
         return self.source_file
+    
+    @abstractmethod
+    def finalize_engine_installation(self, destination_folder: Path):
+        pass
 
 class EngineSourceEGS(EngineSource):
     def can_use(self) -> bool:
@@ -42,8 +48,15 @@ class EngineSourceEGS(EngineSource):
     
     def copy_engine_to(self, destination_folder: Path):
         raise Exception("Engine installation via Epic Games Launcher is not supported. Please open the Epic Games Launcher and install the engine version manually.")
+    
+    def finalize_engine_installation(self, destination_folder: Path):
+        pass
 
-class EngineSourceLocal(EngineSource):
+class EngineSourceInstalledBuild(EngineSource):
+    def finalize_engine_installation(self, destination_folder):
+        write_registry_value(winreg.HKEY_CURRENT_USER,r"SOFTWARE\Epic Games\Unreal Engine\Builds",self.project.engine_association,str(destination_folder))
+
+class EngineSourceLocal(EngineSourceInstalledBuild):
     def can_use(self) -> bool:
         local_folder = Path(self.config["EngineSource.Local"]["LocalFolder"])
         local_folder /= self.project.engine_association
@@ -52,7 +65,7 @@ class EngineSourceLocal(EngineSource):
 
         if local_folder.exists():
             matching_files = [
-                f for f in local_folder.iterdir() 
+                f for f in local_folder.iterdir()
                 if f.is_file() and f.name.startswith(self.project.engine_association) and f.suffix in [".zip", ".7z" ]
             ]
 
@@ -71,7 +84,7 @@ class EngineSourceLocal(EngineSource):
     def copy_engine_to(self, destination_folder: Path):
         copy_with_robocopy(self.source_file, destination_folder)
 
-class EngineSourceAWS(EngineSource):
+class EngineSourceAWS(EngineSourceInstalledBuild):
     def __init__(self, project, config):
         super().__init__(project, config)
         self.s3_client = S3Client(

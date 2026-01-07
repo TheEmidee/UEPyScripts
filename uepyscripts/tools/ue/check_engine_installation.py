@@ -42,6 +42,8 @@ except Exception as e:
         logger.info(f"Delete engine archive file.")
         destination_file.unlink()
 
+        engine_source.finalize_engine_installation(engine_destination_folder)
+
         logger.info(f"Engine installation completed successfully.")
 
         # TODO

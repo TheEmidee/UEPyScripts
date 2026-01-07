@@ -3,29 +3,11 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import winreg 
 import subprocess
 import os
 import platform
 
 from uepyscripts import logger
-
-def get_registry_value(
-    hkey : int,
-    key_path : str,
-    value_name : str
-    ) -> Path:
-    full_path = f"{key_path}\\{value_name}"
-
-    try:
-        with winreg.OpenKey(hkey,key_path) as key:
-            value, _ = winreg.QueryValueEx(key, value_name)
-            return Path(value)
-    except FileNotFoundError:
-        logger.debug(f"No string value in the registry for the key {full_path}")
-    except Exception as e:
-        logger.fatal(f"An error occurred when trying to read {full_path}: {e}")
-        return None
     
 def is_engine_from_egs(engine_version: str) -> bool:
     return re.search(r"^[45]\.[0-9]+(EA)?$", engine_version)

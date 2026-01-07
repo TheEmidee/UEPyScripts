@@ -3,8 +3,9 @@ import os
 
 from pathlib import Path
 
-from ..tools.helpers import get_engine_root_folder_from_env_var, is_engine_from_egs, get_registry_value
 from ..internal.project import Project
+from ..tools.helpers import get_engine_root_folder_from_env_var, is_engine_from_egs
+from ..tools.winreg import get_registry_value
 
 def resolve_engine_from_env_var(project: Project) -> Path:
     return get_engine_root_folder_from_env_var(project.engine_association)
