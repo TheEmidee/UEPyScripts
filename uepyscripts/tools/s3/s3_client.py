@@ -33,7 +33,7 @@ class S3Client:
         
         return files
     
-    def download_file(self, bucket_name: str, key: str, local_folder: Path, show_progress_bar: bool = False):
+    def download_file(self, bucket_name: str, key: str, local_folder: Path, show_progress_bar: bool = False) -> bool:
         filename = os.path.basename(key)
         local_path = local_folder.joinpath(filename)
         
@@ -51,3 +51,8 @@ class S3Client:
             local_path,
             Callback=lambda bytes_transferred: pbar.update(bytes_transferred) if pbar else None
             )
+        
+        if pbar:
+            pbar.close()
+
+        return True

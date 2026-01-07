@@ -32,29 +32,35 @@ class EngineSource(ABC):
         pass
 
     @abstractmethod
-    def copy_engine_to(self, destination_folder: Path):
+    def copy_engine_to(self, destination_folder: Path) -> bool:
         pass
 
     def get_source_full_path(self) -> Path:
         return self.source_file
     
+    def get_finalize_engine_operation_description(self, destination_folder: Path) -> str:
+        return ""
+    
     @abstractmethod
-    def finalize_engine_installation(self, destination_folder: Path):
+    def finalize_engine_installation(self, destination_folder: Path) -> bool:
         pass
 
 class EngineSourceEGS(EngineSource):
     def can_use(self) -> bool:
         return is_engine_from_egs(self.project.engine_association)
     
-    def copy_engine_to(self, destination_folder: Path):
+    def copy_engine_to(self, destination_folder: Path) -> bool:
         raise Exception("Engine installation via Epic Games Launcher is not supported. Please open the Epic Games Launcher and install the engine version manually.")
     
-    def finalize_engine_installation(self, destination_folder: Path):
-        pass
+    def finalize_engine_installation(self, destination_folder: Path) -> bool:
+        return True
 
 class EngineSourceInstalledBuild(EngineSource):
-    def finalize_engine_installation(self, destination_folder):
-        write_registry_value(winreg.HKEY_CURRENT_USER,r"SOFTWARE\Epic Games\Unreal Engine\Builds",self.project.engine_association,str(destination_folder))
+    def get_finalize_engine_operation_description(self,destination_folder: Path) -> str:
+        return f"Update the registry to add the key '{self.project.engine_association}' with the value '{str(destination_folder)}' to the key 'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds'"
+    
+    def finalize_engine_installation(self, destination_folder: Path) -> bool:
+        return write_registry_value(winreg.HKEY_CURRENT_USER,r"SOFTWARE\Epic Games\Unreal Engine\Builds",self.project.engine_association,str(destination_folder))
 
 class EngineSourceLocal(EngineSourceInstalledBuild):
     def can_use(self) -> bool:
@@ -63,26 +69,29 @@ class EngineSourceLocal(EngineSourceInstalledBuild):
 
         logger.info(f"Checking for local engine source at '{local_folder}'")
 
-        if local_folder.exists():
-            matching_files = [
-                f for f in local_folder.iterdir()
-                if f.is_file() and f.name.startswith(self.project.engine_association) and f.suffix in [".zip", ".7z" ]
-            ]
+        try:
+            if local_folder.exists():
+                matching_files = [
+                    f for f in local_folder.iterdir()
+                    if f.is_file() and f.name.startswith(self.project.engine_association) and f.suffix in [".zip", ".7z" ]
+                ]
 
-            if matching_files:
-                self.source_file = Path(sorted(matching_files, key=lambda p: p.name)[-1])
-                logger.info(f"Found local engine source at '{self.source_file}'")
-                return True
-            
-            logger.info(f"Found folder at '{local_folder}' but it does not contain matching engine files")
-            return False
+                if matching_files:
+                    self.source_file = Path(sorted(matching_files, key=lambda p: p.name)[-1])
+                    logger.info(f"Found local engine source at '{self.source_file}'")
+                    return True
+                
+                logger.info(f"Found folder at '{local_folder}' but it does not contain matching engine files")
+                return False
+        except Exception as e:
+            logger.error(f"Error while checking for local engine source at '{local_folder}': {e}")
         
         logger.info(f"Did not find local engine source at '{local_folder}'")
 
         return False
 
-    def copy_engine_to(self, destination_folder: Path):
-        copy_with_robocopy(self.source_file, destination_folder)
+    def copy_engine_to(self, destination_folder: Path) -> bool:
+        return copy_with_robocopy(self.source_file, destination_folder)
 
 class EngineSourceAWS(EngineSourceInstalledBuild):
     def __init__(self, project, config):
@@ -109,8 +118,8 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
         
         return True
     
-    def copy_engine_to(self, destination_folder: Path):    
-        self.s3_client.download_file(
+    def copy_engine_to(self, destination_folder: Path) -> bool:
+        return self.s3_client.download_file(
             bucket_name=self._get_bucket_name(),
             key=str(self.source_file),
             local_folder=destination_folder,
@@ -125,7 +134,7 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
     
         # URL encode the key to handle special characters
         encoded_key = quote(str(self.source_file), safe='/')
-        return Path(f"{base_url}/{encoded_key}")
+        return f"{base_url}/{encoded_key}"
 
 def resolve_engine_source(project: Project) -> EngineSource:
     config = resolve_config(project)

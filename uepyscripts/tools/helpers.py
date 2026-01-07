@@ -177,8 +177,8 @@ def decompress_7z(archive_path : Path, output_dir : Path =None, threads : int =-
         
         if process.returncode == 0:
             logger.info(f"Successfully extracted: {archive_path}")
-            logger.info(f"Output directory: {output_dir}")
-            logger.info(f"Threads used: {threads}")
+            logger.debug(f"Output directory: {output_dir}")
+            logger.debug(f"Threads used: {threads}")
             return True
         else:
             stderr = process.stderr.read()

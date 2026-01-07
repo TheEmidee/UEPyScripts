@@ -1,57 +1,66 @@
-from ...tools.helpers import decompress_7z
-from ...tools.ue.engine_installation.engine_destination import resolve_engine_destination
-from ...tools.ue.engine_installation.engine_source import resolve_engine_source
+import argparse
+
+from ...tools.ue.engine_installation.engine_installer import EngineInstaller
 from ...internal.project import resolve_project
 from ...internal.engine import resolve_engine
 from ... import logger
 
-try:
-    project = resolve_project()
-except Exception as e:
-    logger.fatal(f"Project resolution failed: {e}")
-    exit(1)
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Check and install Unreal Engine installation for the given project.'
+    )
+    parser.add_argument(
+        '--unattended',
+        action='store_true',
+        help='Disable interactive prompts'
+    )
+    
+    return parser.parse_args()
 
-try:
-    engine = resolve_engine(project)
-except Exception as e:
-    logger.error(f"Engine resolution failed: {e}")
+def main():
+    """Main function."""
+    args = parse_arguments()
 
     try:
-        engine_source = resolve_engine_source(project)
-        engine_destination_folder = resolve_engine_destination(project)
-
-        source_full_path = engine_source.get_source_full_path()
-        
-        engine_destination_folder.mkdir(parents=True, exist_ok=True)
-
-        source_file_name = source_full_path.name
-
-        if engine_destination_folder.joinpath(source_file_name).exists():
-            logger.info(f"The engine source file '{source_file_name}' already exists in the destination folder '{engine_destination_folder}'. Skipping copy.")
-        else:
-            logger.info(f"Could not find '{source_file_name}' in '{engine_destination_folder}'. Starting engine copy...")
-            engine_source.copy_engine_to(engine_destination_folder)
-
-        destination_file = engine_destination_folder.joinpath(source_file_name)
-
-        if not decompress_7z(
-            archive_path=destination_file
-            ):
-            raise Exception(f"Failed to decompress the engine archive at '{destination_file}'")
-
-        logger.info(f"Delete engine archive file.")
-        destination_file.unlink()
-
-        engine_source.finalize_engine_installation(engine_destination_folder)
-
-        logger.info(f"Engine installation completed successfully.")
-
-        # TODO
-        # * Add key to registry when needed
-        # * Ask confirmation to user to validate source of the copy
-        # * Ask confirmation to user to validate deletion of the archive
-        # * unattended mode
-
+        project = resolve_project()
     except Exception as e:
-        logger.fatal(f"Error when installing the engine: {e}")
+        logger.fatal(f"Project resolution failed: {e}")
         exit(1)
+
+    try:
+        engine = resolve_engine(project)
+        logger.info(f"Engine '{engine.version}' for project '{project.project_name}' is already installed at '{engine.root_path}'. No action is required.")
+    except Exception as e:
+        logger.error(f"Engine resolution failed: {e}")
+
+        try:
+            engine_installer = EngineInstaller(project)
+            task_list = engine_installer.get_task_list()
+            task_list.print()
+
+            if not args.unattended:
+                while True:
+                    prompt = (
+    "╔═══════════════════════════════════════════════════╗\n"
+    "║  Are you OK to proceed with the above operations? ║\n"
+    "╚═══════════════════════════════════════════════════╝\n"
+    "Enter Y or N: "
+)
+                    response = input(prompt).strip().upper()
+                    if response in ['Y', 'N']:
+                        break
+                    print("Please enter Y or N")
+            
+            if response == 'N':
+                exit(0)
+
+            task_list.execute()
+
+            logger.info(f"Engine installation completed successfully.")
+        except Exception as e:
+            logger.fatal(f"Error when installing the engine: {e}")
+            exit(1)
+
+if __name__ == '__main__':
+    main()
