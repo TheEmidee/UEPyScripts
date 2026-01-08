@@ -105,7 +105,7 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
     def can_use(self) -> bool:
         files = self.s3_client.get_bucket_files(
             bucket_name=self._get_bucket_name(),
-            prefix=self.project.engine_association,
+            prefix=f"Engine/{self.project.engine_association}",
             filter_func=lambda obj: obj['Key'].endswith(('.zip', '.7z'))
         )
         
@@ -142,7 +142,10 @@ def resolve_engine_source(project: Project) -> EngineSource:
     if egs.can_use():
         return egs
     
-    sources = config["EngineSource"]["Sources"].split("+")
+    try:
+        sources = config["EngineSource"]["Sources"].split("+")
+    except Exception as e:
+        raise Exception("No engine source defined in the configuration file") from e
 
     for source_name in sources:
         source_name = source_name.strip()
