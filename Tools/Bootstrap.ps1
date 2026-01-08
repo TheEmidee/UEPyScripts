@@ -70,6 +70,24 @@ catch {
     exit 1
 }
 
+$configFilePath = Join-Path -Path $projectRoot -ChildPath "Config/PyScripts/config.ini"
+if (-not (Test-Path -Path $configFilePath)) {
+    Write-Host "`nConfig file not found at $configFilePath. Creating a default config.ini..." -ForegroundColor Cyan
+    $defaultConfigContent = @"
+[Project]
+; BuildgraphPath = Scripts\Build\BuildGraph\BuildGraph.xml
+; BuildgraphSharedProperties = Publish_Directory=Saved/LocalBuilds
+; AutomationScriptsDirectories = Build/Scripts+Plugins/BuildInformation/Scripts/Automation
+
+[Jenkins]
+; BuildgraphSharedStoragePath = \\nas\jenkins\UE-BuildGraph
+"@
+
+    Set-Content -Path $configFilePath -Value $defaultConfigContent -Encoding UTF8
+    Write-Host "`nconfig.ini has been successfully created!" -ForegroundColor Green
+    Write-Host "Location: $configFilePath" -ForegroundColor Green
+}
+
 $executeConfirmation = Read-Host "`nDo you want to create the CompileAndRunEditor.ps1 file? (Y/N)"
 if ($executeConfirmation -eq 'Y' -or $executeConfirmation -eq 'y') {
     $compileAndRunEditorPath = Join-Path -Path $projectRoot -ChildPath "CompileAndRunEditor.ps1"
