@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import subprocess
 import sys
 import subprocess
@@ -198,3 +199,17 @@ def decompress_7z(archive_path : Path, output_dir : Path =None, threads : int =-
 def get_date_formatted_name() -> str:
     """Return current date in yyyyMMdd format."""
     return datetime.now().strftime("%Y%m%d")
+
+def is_7z_installed() -> bool:
+    """Check if 7-zip is installed and accessible."""
+    try:
+        if shutil.which('7z') is not None:
+            return True
+        
+        try:
+            subprocess.run(['7z'], capture_output=True, check=False)
+            return True
+        except FileNotFoundError:
+            return False
+    except FileNotFoundError:
+        return False

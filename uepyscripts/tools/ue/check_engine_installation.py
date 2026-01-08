@@ -17,9 +17,11 @@ which is useful when executed on a build pipeline like Jenkins or Horde.
 
 import argparse
 
-from ...tools.ue.engine_installation.engine_installer import EngineInstaller
+
 from ...internal.project import resolve_project
 from ...internal.engine import resolve_engine
+from ...tools.ue.engine_installation.engine_installer import EngineInstaller
+from ...tools.helpers import is_7z_installed
 from ... import logger
 
 def parse_arguments():
@@ -37,6 +39,14 @@ def parse_arguments():
 
 def main():
     """Main function."""
+    logger.info("Starting Unreal Engine installation check...")
+
+    if not is_7z_installed():
+        logger.fatal("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
+        exit(1)
+
+    logger.info("7-Zip is installed. Proceeding...")
+
     args = parse_arguments()
 
     try:
