@@ -147,7 +147,7 @@ A typical usage of this module in a jenkins pipeline script would look like:
    """
   ```
 
-  You will have to add a entry in your `config.ini` file in `Config/PyScripts`:
+  You will have to uncomment or add the entry `BuildgraphSharedStoragePath` in your `config.ini` file in `Config/PyScripts`:
 
   ```ini
    [Jenkins]
