@@ -110,7 +110,7 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
         )
         
         if not files:
-            logger.info(f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket '{self.config['EngineSource.AWS']['AWS_BucketName']}'")
+            logger.info(f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket '{self.config['EngineSource.AWS']['AWS_BucketName']}' in the folder 'Engine'")
             return False
         
         self.source_file = Path(sorted(files)[-1])
