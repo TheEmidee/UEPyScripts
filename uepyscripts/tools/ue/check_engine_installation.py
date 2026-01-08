@@ -40,13 +40,6 @@ def parse_arguments():
 def main():
     """Main function."""
     logger.info("Starting Unreal Engine installation check...")
-
-    if not is_7z_installed():
-        logger.fatal("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
-        exit(1)
-
-    logger.info("7-Zip is installed. Proceeding...")
-
     args = parse_arguments()
 
     try:
@@ -62,27 +55,10 @@ def main():
         logger.error(f"Engine resolution failed: {e}")
 
         try:
-            engine_installer = EngineInstaller(project)
+            engine_installer = EngineInstaller(project, args.unattended)
             task_list = engine_installer.get_task_list()
             task_list.print()
-
-            if not args.unattended:
-                while True:
-                    prompt = (
-    "╔═══════════════════════════════════════════════════╗\n"
-    "║  Are you OK to proceed with the above operations? ║\n"
-    "╚═══════════════════════════════════════════════════╝\n"
-    "Enter Y or N: "
-)
-                    response = input(prompt).strip().upper()
-                    if response in ['Y', 'N']:
-                        break
-                    print("Please enter Y or N")
-            
-            if response == 'N':
-                exit(0)
-
-            task_list.execute()
+            task_list.execute(args.unattended)
 
             logger.info(f"Engine installation completed successfully.")
         except Exception as e:

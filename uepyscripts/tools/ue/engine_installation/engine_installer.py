@@ -1,7 +1,7 @@
 from pathlib import Path
 from .... import logger
 from ....internal.project import Project
-from ....tools.helpers import decompress_7z
+from ....tools.helpers import decompress_7z, is_7z_installed
 from ....tools.ue.engine_installation.engine_destination import resolve_engine_destination
 from ....tools.ue.engine_installation.engine_source import resolve_engine_source
 
@@ -21,7 +21,23 @@ class TaskList:
     def add_task(self, task: Task):
         self.tasks.append(task)
     
-    def execute(self):
+    def execute(self, unattended: bool = False):
+        if not unattended:
+            while True:
+                prompt = (
+"╔═══════════════════════════════════════════════════╗\n"
+"║  Are you OK to proceed with the above operations? ║\n"
+"╚═══════════════════════════════════════════════════╝\n"
+"Enter Y or N: "
+)
+                response = input(prompt).strip().upper()
+                if response in ['Y', 'N']:
+                    break
+                print("Please enter Y or N")
+        
+            if response == 'N':
+                exit(0)
+            
         for i, task in enumerate(self.tasks):
             logger.info(f"{i+1}. {task.task_description}")
             try:
@@ -40,10 +56,37 @@ class TaskList:
         logger.info("")
 
 class EngineInstaller:
-    def __init__(self, project : Project):
+    def __init__(self, project : Project, unattended: bool = False):
+        self.check_requirements()
+
         self.project = project
+        try:
+            self.engine_destination_folder = resolve_engine_destination(project)
+        except FileNotFoundError as e:
+            if unattended:
+                raise e
+            
+            self.prompt_for_engine_destination()
+        
         self.engine_source = resolve_engine_source(project)
-        self.engine_destination_folder = resolve_engine_destination(project)
+
+    def prompt_for_engine_destination(self):
+        while True:
+            prompt = (
+"╔═══════════════════════════════════════════════════════════╗\n"
+"║  Where do you want to install the engine (Enter a path) ? ║\n"
+"╚═══════════════════════════════════════════════════════════╝\n"
+)
+            response = input(prompt).strip()
+            path = Path(response)
+            if path.exists() and path.is_dir():
+                self.engine_destination_folder = path
+                break
+            print(f"The path '{response}' does not exist or is not a folder. Please enter a valid folder path.")
+
+    def check_requirements(self):
+        if not is_7z_installed():
+            raise RuntimeError("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
 
     def get_task_list(self) -> TaskList:
         tasks = TaskList()
@@ -55,7 +98,6 @@ class EngineInstaller:
         if destination_file.exists():
             logger.info(f"The engine source file '{source_file_name}' already exists in the destination folder '{self.engine_destination_folder}'. Skipping copy.")
         else:
-            # logger.info(f"Could not find '{source_file_name}' in '{self.engine_destination_folder}'. Starting engine copy...")
             if not self.engine_destination_folder.exists():
                 tasks.add_task(
                     Task(
