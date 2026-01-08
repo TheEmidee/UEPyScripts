@@ -11,13 +11,9 @@ import argparse
 import shutil
 import sys
 
-from datetime import datetime
 from pathlib import Path
 
-
-def get_date_formatted_name() -> str:
-    """Return current date in yyyyMMdd format."""
-    return datetime.now().strftime("%Y%m%d")
+from ...tools.helpers import get_date_formatted_name
 
 
 def find_available_name(parent_dir: Path, base_name: str) -> str:

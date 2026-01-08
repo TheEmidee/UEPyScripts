@@ -1,11 +1,13 @@
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import subprocess
 import os
 import platform
+
+from datetime import datetime
+from pathlib import Path
 
 from uepyscripts import logger
     
@@ -192,3 +194,7 @@ def decompress_7z(archive_path : Path, output_dir : Path =None, threads : int =-
     except FileNotFoundError:
         logger.error(f"7-zip executable not found. Please install 7-zip and ensure it's in your PATH.")
         return False
+    
+def get_date_formatted_name() -> str:
+    """Return current date in yyyyMMdd format."""
+    return datetime.now().strftime("%Y%m%d")

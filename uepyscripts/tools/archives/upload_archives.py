@@ -2,15 +2,20 @@
 """
 S3 Folder Upload Script
 
-Uploads a local folder to an S3 bucket with collision detection and cleanup.
-Generates download URLs for all uploaded files.
+Uploads a local folder to an S3 bucket.
+You can provide the folder to create in the bucket.
+The script will automatically append the date using the format YYYYMMDD to the folder.
+It will handle folder name collisions and will suffix the folder with _XX.
+
+It can also clean up old folders in the bucket, keeping only a specified number of the most recent ones.
+Finally, it can output a text file that will contain the download URLs for all uploaded files.
 """
 
 import argparse
 import sys
 from pathlib import Path
-from botocore.exceptions import ClientError
 
+from ...tools.helpers import get_date_formatted_name
 from ...tools.s3.s3_client import S3Client
 
 
@@ -29,7 +34,7 @@ def parse_arguments():
     )
     parser.add_argument(
         '--destination_folder',
-        help='Base destination folder in the S3 bucket (local folder name will be appended)'
+        help='Base destination folder in the S3 bucket'
     )
     parser.add_argument(
         '--output_file',
@@ -92,14 +97,12 @@ def main():
     
     s3_client = S3Client(args.access_key, args.secret_key, args.region)
     
-    # Construct the full destination path
-    local_folder_name = Path(args.local_folder).name
-    full_destination = f"{args.destination_folder}/{local_folder_name}".replace('\\', '/')
+    date_name = get_date_formatted_name()
+    full_destination = f"{args.destination_folder}/{date_name}".replace('\\', '/')
     
-    # Handle folder name collision
     final_destination = full_destination
     
-    if s3_client.folder_exists_in_bucket(s3_client, args.bucket_name, full_destination):
+    if s3_client.folder_exists_in_bucket(args.bucket_name, full_destination):
         if args.force:
             print(f"Folder '{full_destination}' exists, but --force specified. Overwriting...")
             final_destination = full_destination
@@ -127,7 +130,7 @@ def main():
         write_download_urls(uploaded_objects, args.output_file)
     
     # Cleanup old folders
-    s3_client.cleanup_old_folders(s3_client, args.bucket_name, args.keep_count)
+    s3_client.cleanup_old_folders(args.bucket_name, args.keep_count)
     
     print("Script completed successfully!")
 
