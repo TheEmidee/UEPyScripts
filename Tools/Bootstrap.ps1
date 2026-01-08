@@ -70,7 +70,10 @@ catch {
     exit 1
 }
 
-$compileAndRunEditorContent = @"
+$executeConfirmation = Read-Host "`nDo you want to create the CompileAndRunEditor.ps1 file? (Y/N)"
+if ($executeConfirmation -eq 'Y' -or $executeConfirmation -eq 'y') {
+    $compileAndRunEditorPath = Join-Path -Path $projectRoot -ChildPath "CompileAndRunEditor.ps1"
+    $compileAndRunEditorContent = @"
 try {
     .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.close_editor"
     .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.compile_editor"
@@ -81,12 +84,37 @@ catch {
 }
 "@
 
-$executeConfirmation = Read-Host "`nDo you want to create the CompileAndRunEditor.ps1 file? (Y/N)"
-if ($executeConfirmation -eq 'Y' -or $executeConfirmation -eq 'y') {
-    $compileAndRunEditorPath = Join-Path -Path $projectRoot -ChildPath "CompileAndRunEditor.ps1"
     Set-Content -Path $compileAndRunEditorPath -Value $compileAndRunEditorContent -Encoding UTF8
     Write-Host "`nCompileAndRunEditor.ps1 has been successfully created!" -ForegroundColor Green
     Write-Host "Location: $compileAndRunEditorPath" -ForegroundColor Green
+}
+
+$executeConfirmation = Read-Host "`nDo you want to create a script example about how to run a buildgraph task? (Y/N)"
+if ($executeConfirmation -eq 'Y' -or $executeConfirmation -eq 'y') {
+    $buildGraphScriptPath = Join-Path -Path $projectRoot -ChildPath "Scripts/Project/BuildgraphTask.ps1"
+    $buildGraphScriptDir = Split-Path -Path $buildGraphScriptPath -Parent
+
+    $pyScriptsFolder = [System.IO.Path]::GetRelativePath($buildGraphScriptDir, $scriptDir)
+    $pyScriptsFolder = $pyScriptsFolder -replace '^\\.\\', '' -replace '\\', '/'
+
+    $buildgraphSampleContent = @"
+.( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) ``
+    -moduleName "uepyscripts.run.buildgraph" ``
+    -arguments @{
+        target = "Buildgraph Task Name";
+        properties = @"
+        { 
+            "Clean" : "True",
+            "Targets" : "MyGameClient+MyGameServer",
+            "TargetConfigurations" : "Development+Shipping",
+        }
+`"@;
+}
+"@
+
+    Set-Content -Path $buildGraphScriptPath -Value $buildgraphSampleContent -Encoding UTF8
+    Write-Host "`BuildgraphTask.ps1 has been successfully created!" -ForegroundColor Green
+    Write-Host "Location: $buildGraphScriptPath" -ForegroundColor Green
 }
 
 $executeConfirmation = Read-Host "`nDo you want to execute Setup.ps1 now? (Y/N)"
