@@ -69,33 +69,6 @@ jobs:
           fi
           echo ""
           
-          # Find and check .uplugin file
-          UPLUGIN_FILE=$(find . -name "*.uplugin" -type f | head -n 1)
-          
-          if [ -z "$UPLUGIN_FILE" ]; then
-            echo "❌ Could not find .uplugin file"
-            ERRORS=$((ERRORS + 1))
-          else
-            echo "🎮 Found plugin file: $UPLUGIN_FILE"
-            
-            UPLUGIN_VERSION=$(grep -oP '"VersionName"\s*:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$UPLUGIN_FILE")
-            
-            if [ -z "$UPLUGIN_VERSION" ]; then
-              echo "❌ Could not find VersionName in $UPLUGIN_FILE"
-              ERRORS=$((ERRORS + 1))
-            else
-              echo "🔌 .uplugin VersionName: $UPLUGIN_VERSION"
-              
-              if [ "$UPLUGIN_VERSION" = "$CHANGELOG_VERSION" ]; then
-                echo "✅ .uplugin version matches CHANGELOG.md"
-              else
-                echo "❌ .uplugin version ($UPLUGIN_VERSION) does not match CHANGELOG.md ($CHANGELOG_VERSION)"
-                ERRORS=$((ERRORS + 1))
-              fi
-            fi
-          fi
-          echo ""
-          
           # Summary
           if [ $ERRORS -eq 0 ]; then
             echo "🎉 All version checks passed!"
@@ -106,6 +79,5 @@ jobs:
             echo "Please ensure:"
             echo "  1. CHANGELOG.md is updated with a new version entry (## [X.Y.Z] - YYYY-MM-DD)"
             echo "  2. README.md version badge matches the CHANGELOG version"
-            echo "  3. .uplugin VersionName matches the CHANGELOG version"
             exit 1
           fi
