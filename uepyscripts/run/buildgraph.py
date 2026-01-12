@@ -63,6 +63,8 @@ def run(
 
     if properties is not None:
         for key, value in properties.items():
+            if ' ' in value:
+                value = f'"{value}"'
             arguments.append(f"-set:{key}={value}")
 
     if extra_arguments is not None:
