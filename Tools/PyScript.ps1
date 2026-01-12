@@ -54,7 +54,9 @@ function Run-PythonModule {
         $argArray = @()
         $arguments.GetEnumerator() | ForEach-Object {
             $argArray += "--$($_.Key)"
-            $argArray += $_.Value
+            if ($_.Value -ne "") {
+                $argArray += $_.Value
+            }
         }
 
         & python -m $moduleName $argArray
