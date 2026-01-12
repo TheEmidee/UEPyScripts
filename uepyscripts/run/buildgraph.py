@@ -127,8 +127,9 @@ def parse_arguments(argv=None):
     )
     parser.add_argument(
         "--properties", 
-        type=str, 
-        default="", 
+        type=str,
+        default=None,
+        nargs='?',
         help="JSON string representing a dictionary with the properties to pass to buildgraph. "
              "Ex: '{\"key1\": \"value1\", \"key2\": \"value2\"}'"
     )
