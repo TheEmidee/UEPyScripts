@@ -259,15 +259,16 @@ How the script works:
 - It will try to resolve the project and the engine the project needs. If this succeeds, nothing has to be done, since the project can be open
 - If the engine resolution fails, then an update is executed:
 - Try to determine the folder where the engine must be installed by reading the environment variable `NODE_UE_ROOT`. If this environment variable exists and points to a valid folder, then this is used. Otherwise the script will prompt the user for a destination. (The environment variable is useful on build machines to allow unattended installations as part of the build pipeline)
-- Choose a source for where to get the engine archives: You can configure which sources to use by updating the property `[EngineSource].Sources` in the `config.ini`. You can use `Local`, `AWS`, or both with `Local+AWS`. 
-   - You can define where the `Local` source can fetch the archives by setting the property `[EngineSource.Local].LocalFolder`.
-   - You can define the amazon S3 properties `AWS_SecretKey`, `AWS_AccessKey`, `AWS_BucketName` and `AWS_Region` under the category `EngineSource.AWS`. Please note that the script will look for the engine archives in the folder `Engine` of the bucket.
+- Choose a source for where to get the engine archives: You can configure which sources to use by updating the property `[EngineUpdate.Sources].Sources` in the `config.ini`. You can use `Local`, `AWS`, or both with `Local+AWS`. 
+   - You can define where the `Local` source can fetch the archives by setting the property `[EngineUpdate.Source.Local].LocalFolder`.
+   - You can define the amazon S3 properties `AWS_SecretKey`, `AWS_AccessKey`, `AWS_BucketName` and `AWS_Region` under the category `EngineUpdate.Source.AWS`. Please note that the script will look for the engine archives in the folder `Engine` of the bucket.
    - The script will try each source one at a time, and select the first source that it can reach, and that has an engine archive which has a valid name
 - Create the destination folder if it does not exist, using the `EngineAssociation` property (So if the destination folder is `C:/UE` and the `EngineAssociation` is `UE-MyProject-5.2`, you will have a folder `C:/UE/UE-MyProject-5.2`)
 - Copy the engine archive from the source to the destination folder
 - Decompress the engine archive in-place in the destination folder (You would now have the folder `C:/UE/UE-MyProject-5.2/Engine`)
 - Delete the engine archive
 - Register the engine in the windows registry by creating a key named `UE-MyProject-5.2` at `HKCU\SOFTWARE\Epic Games\Unreal Engine\Builds` with the value `C:/UE/UE-MyProject-5.2/Engine`
+- Update the SDKs you need to build the platforms of the project with turnkey. For this, you will have to list all the platforms in the config file by setting the property `[EngineUpdate.TurnKey]` with all the platform names, separated by `+`. Ex: `Platforms = Win64+PS5+Switch`. This will run the command `turnkey -command=VerifySdk -platform=PLATFORM -UpdateIfNeeded -unattended` for each platform.
 
 ## Development & Testing 🧪
 

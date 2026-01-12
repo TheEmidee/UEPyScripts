@@ -21,7 +21,6 @@ import argparse
 from ...internal.project import resolve_project
 from ...internal.engine import resolve_engine
 from ...tools.ue.engine_installation.engine_installer import EngineInstaller
-from ...tools.helpers import is_7z_installed
 from ... import logger
 
 def parse_arguments():
@@ -51,6 +50,7 @@ def main():
     try:
         engine = resolve_engine(project)
         logger.info(f"Engine '{engine.version}' for project '{project.project_name}' is already installed at '{engine.root_path}'. No action is required.")
+        raise Exception("")
     except Exception as e:
         logger.error(f"Engine resolution failed: {e}")
 

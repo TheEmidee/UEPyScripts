@@ -1,7 +1,12 @@
 from pathlib import Path
+from typing import List
+
+
 from .... import logger
+from ....internal.config import resolve_config
 from ....internal.project import Project
-from ....tools.helpers import decompress_7z, is_7z_installed
+from ....internal.engine import resolve_engine
+from ....tools.helpers import is_7z_installed
 from ....tools.ue.engine_installation.engine_destination import resolve_engine_destination
 from ....tools.ue.engine_installation.engine_source import resolve_engine_source
 
@@ -67,8 +72,9 @@ class EngineInstaller:
                 raise e
             
             self.prompt_for_engine_destination()
-        
-        self.engine_source = resolve_engine_source(project)
+
+        self.config = resolve_config(project)        
+        self.engine_source = resolve_engine_source(project, self.config)
 
     def prompt_for_engine_destination(self):
         while True:
@@ -87,6 +93,20 @@ class EngineInstaller:
     def check_requirements(self):
         if not is_7z_installed():
             raise RuntimeError("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
+        
+    def get_project_platforms(self) -> List[str]:
+        return self.config["EngineUpdate.TurnKey"]["Platforms"].split("+")
+    
+    def update_sdks(self, platforms: List[str]):
+        engine = resolve_engine(self.project)
+        for platform in platforms:
+            engine.uat([
+                "turnkey",
+                "-command=VerifySdk",
+                f"-platform={platform}",
+                "-UpdateIfNeeded",
+                "-unattended"
+            ])
 
     def get_task_list(self) -> TaskList:
         tasks = TaskList()
@@ -132,6 +152,16 @@ class EngineInstaller:
                 Task(
                     self.engine_source.get_finalize_engine_operation_description(self.engine_destination_folder),
                     lambda: self.engine_source.finalize_engine_installation(self.engine_destination_folder)
+                )
+            )
+
+        project_platforms = self.get_project_platforms()
+
+        if any(project_platforms):
+            tasks.add_task(
+                Task(
+                    "Update AutoSDK with turnkey",
+                    lambda: self.update_sdks(project_platforms)
                 )
             )
 

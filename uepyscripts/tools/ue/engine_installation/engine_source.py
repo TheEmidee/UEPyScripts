@@ -64,7 +64,7 @@ class EngineSourceInstalledBuild(EngineSource):
 
 class EngineSourceLocal(EngineSourceInstalledBuild):
     def can_use(self) -> bool:
-        local_folder = Path(self.config["EngineSource.Local"]["LocalFolder"])
+        local_folder = Path(self.config["EngineUpdate.Source.Local"]["LocalFolder"])
         local_folder /= self.project.engine_association
 
         logger.info(f"Checking for local engine source at '{local_folder}'")
@@ -97,24 +97,24 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
     def __init__(self, project, config):
         super().__init__(project, config)
         self.s3_client = S3Client(
-            access_key=self.config["EngineSource.AWS"]["AWS_AccessKey"],
-            secret_key=self.config["EngineSource.AWS"]["AWS_SecretKey"],
-            region=self.config["EngineSource.AWS"]["AWS_Region"]
+            access_key=self.config["EngineUpdate.Source.AWS"]["AWS_AccessKey"],
+            secret_key=self.config["EngineUpdate.Source.AWS"]["AWS_SecretKey"],
+            region=self.config["EngineUpdate.Source.AWS"]["AWS_Region"]
         )
         
     def can_use(self) -> bool:
         files = self.s3_client.get_bucket_files(
             bucket_name=self._get_bucket_name(),
-            prefix=f"Engine/{self.project.engine_association}",
+            prefix=f"{self.project.engine_association}",
             filter_func=lambda obj: obj['Key'].endswith(('.zip', '.7z'))
         )
         
         if not files:
-            logger.info(f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket '{self.config['EngineSource.AWS']['AWS_BucketName']}' in the folder 'Engine'")
+            logger.info(f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket '{self.config['EngineUpdate.Source.AWS']['AWS_BucketName']}' in the folder 'Engine'")
             return False
         
         self.source_file = Path(sorted(files)[-1])
-        logger.info(f"Found engine source in AWS S3: '{self.source_file}' in the bucket '{self.config['EngineSource.AWS']['AWS_BucketName']}'")
+        logger.info(f"Found engine source in AWS S3: '{self.source_file}' in the bucket '{self.config['EngineUpdate.Source.AWS']['AWS_BucketName']}'")
         
         return True
     
@@ -127,7 +127,7 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
         )
 
     def _get_bucket_name(self) -> str:
-        return self.config["EngineSource.AWS"]["AWS_BucketName"]
+        return self.config["EngineUpdate.Source.AWS"]["AWS_BucketName"]
 
     def get_source_full_path(self) -> Path:
         base_url = f"https://{self._get_bucket_name()}.s3.amazonaws.com"
@@ -136,14 +136,13 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
         encoded_key = quote(str(self.source_file), safe='/')
         return f"{base_url}/{encoded_key}"
 
-def resolve_engine_source(project: Project) -> EngineSource:
-    config = resolve_config(project)
+def resolve_engine_source(project: Project, config : Config) -> EngineSource:
     egs = EngineSourceEGS(project, config)
     if egs.can_use():
         return egs
     
     try:
-        sources = config["EngineSource"]["Sources"].split("+")
+        sources = config["EngineUpdate.Sources"]["Sources"].split("+")
     except Exception as e:
         raise Exception("No engine source defined in the configuration file") from e
 
