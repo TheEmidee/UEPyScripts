@@ -1,121 +1,80 @@
-# This script sets up a Python virtual environment in the parent directory and installs dependencies from requirements.txt
-$venvName = ".venv"
-$venvPath = Join-Path -Path $PSScriptRoot -ChildPath $venvName
-$requirementsPath = Join-Path -Path $PSScriptRoot -ChildPath "requirements.txt"
-$lastInstallPath = Join-Path -Path $venvPath -ChildPath ".last_requirements_install"
+# PowerShell script to set up Python virtual environment and install requirements
+# Usage: .\setup-env.ps1
 
-function Activate-VirtualEnvironment
-{
-    Write-Host "Activating Python virtual environment at $($venvPath)"
-    
-    $activateScript = Join-Path -Path $venvPath -ChildPath "Scripts\Activate.ps1"
-    
-    if ( Test-Path -Path $activateScript ) {
-        & $activateScript
-        Write-Host "Virtual environment activated."
-    } else {
-        Write-Error "Activation script not found at $($activateScript)"
+param(
+    [string]$VenvName = ".venv",
+    [string]$PyProjectFile = "pyproject.toml",
+    [switch]$Force
+)
+
+Write-Host "Setting up Python virtual environment..." -ForegroundColor Green
+
+# Check if Python is installed
+try {
+    $pythonVersion = python --version 2>&1
+    Write-Host "Found Python: $pythonVersion" -ForegroundColor Yellow
+} catch {
+    Write-Host "Error: Python is not installed or not in PATH" -ForegroundColor Red
+    exit 1
+}
+
+# Check if requirements.txt exists
+if (!(Test-Path $PyProjectFile)) {
+    Write-Host "Warning: $PyProjectFile not found in current directory" -ForegroundColor Yellow
+    $response = Read-Host "Continue without installing requirements? (y/n)"
+    if ($response -ne "y" -and $response -ne "Y") {
         exit 1
     }
 }
 
-function Install-Requirements
-{
-    param(
-        [string]$Reason = "Installing dependencies"
-    )
+# Remove existing virtual environment if Force flag is used
+if ($Force -and (Test-Path $VenvName)) {
+    Write-Host "Removing existing virtual environment..." -ForegroundColor Yellow
+    Remove-Item -Recurse -Force $VenvName
+}
+
+# Create virtual environment if it doesn't exist
+if (!(Test-Path $VenvName)) {
+    Write-Host "Creating virtual environment '$VenvName'..." -ForegroundColor Yellow
+    python -m venv $VenvName
     
-    if ( Test-Path $requirementsPath ) {
-        Write-Host "$Reason from requirements.txt..." -ForegroundColor Yellow
-        
-        # Upgrade pip to the latest version
-        Write-Host "Upgrading pip to the latest version..."
-        python -m pip install --upgrade pip
-        
-        # Install/update dependencies
-        pip install -r $requirementsPath
-        
-        # Record the timestamp of this installation
-        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Set-Content -Path $lastInstallPath -Value $timestamp
-        Write-Host "Dependencies installation completed at $timestamp" -ForegroundColor Green
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Failed to create virtual environment" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "Virtual environment created successfully!" -ForegroundColor Green
+} else {
+    Write-Host "Virtual environment '$VenvName' already exists" -ForegroundColor Yellow
+}
+
+# Activate virtual environment
+Write-Host "Activating virtual environment..." -ForegroundColor Yellow
+& ".\$VenvName\Scripts\Activate.ps1"
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: Failed to activate virtual environment" -ForegroundColor Red
+    exit 1
+}
+
+# Upgrade pip
+Write-Host "Upgrading pip..." -ForegroundColor Yellow
+python -m pip install --upgrade pip
+
+# Install requirements if file exists
+if (Test-Path $PyProjectFile) {
+    Write-Host "Installing packages from $PyProjectFile..." -ForegroundColor Yellow
+    pip install -e .[dev]
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "All packages installed successfully!" -ForegroundColor Green
     } else {
-        Write-Warning "requirements.txt not found at $requirementsPath"
+        Write-Host "Error: Some packages failed to install" -ForegroundColor Red
     }
+} else {
+    Write-Host "Skipping package installation - no requirements file found" -ForegroundColor Yellow
 }
 
-function Test-RequirementsNeedUpdate
-{
-    # If requirements.txt doesn't exist, no need to update
-    if ( -not (Test-Path $requirementsPath) ) {
-        return $false
-    }
-    
-    # If we've never installed requirements, we need to install
-    if ( -not (Test-Path $lastInstallPath) ) {
-        Write-Host "No previous requirements installation found." -ForegroundColor Yellow
-        return $true
-    }
-    
-    # Get the last modification time of requirements.txt
-    $requirementsModified = (Get-Item $requirementsPath).LastWriteTime
-    
-    # Get the timestamp of last installation
-    $lastInstallTime = Get-Content $lastInstallPath | Get-Date
-    
-    # Compare timestamps
-    if ( $requirementsModified -gt $lastInstallTime ) {
-        Write-Host "requirements.txt has been modified since last installation." -ForegroundColor Yellow
-        Write-Host "  Requirements file: $($requirementsModified)"
-        Write-Host "  Last installation: $($lastInstallTime)"
-        return $true
-    }
-    
-    Write-Host "Requirements are up to date (last installed: $lastInstallTime)" -ForegroundColor Green
-    return $false
-}
-
-function Initialize-PythonVEnv
-{
-    Write-Host "Create python virtual environment in $($venvPath)"
-
-    Push-Location $PSScriptRoot
-
-    python -m venv $venvName
-
-    Pop-Location
-
-    if ( Test-Path -Path $venvPath ) {
-        Write-Host "Python virtual environment '$($venvName)' has been created successfully." -ForegroundColor Green
-
-        Activate-VirtualEnvironment
-
-        # Install initial requirements
-        Install-Requirements -Reason "Installing initial dependencies"
-
-        Write-Host "Virtual environment setup complete."
-    } else {
-        throw "Failed to create the Python virtual environment."
-    }
-}
-
-function Test-PythonVirtualEnvironment
-{
-    Write-Host "Check if the python virtual environment is setup..."
-
-    if ( $false -eq ( Test-Path -Path $venvPath ) ) {
-        Write-Warning "No Python virtual environment found in the working directory at $($venvPath)."
-        
-        Initialize-PythonVEnv
-    } else {
-        Write-Host "Python virtual environment found at $venvPath" -ForegroundColor Green
-        Activate-VirtualEnvironment
-        
-        # Check if requirements need to be updated
-        if ( Test-RequirementsNeedUpdate ) {
-            Install-Requirements -Reason "Updating dependencies"
-        }
-    }
-}
-
-Test-PythonVirtualEnvironment
+Write-Host "`nSetup complete!" -ForegroundColor Green
+Write-Host "Virtual environment is now active." -ForegroundColor Green
+Write-Host "To deactivate later, run: deactivate" -ForegroundColor Cyan
+Write-Host "To activate again, run: .\$VenvName\Scripts\Activate.ps1" -ForegroundColor Cyan

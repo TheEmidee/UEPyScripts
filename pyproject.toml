@@ -1,0 +1,120 @@
+[project]
+name = "UEPyScripts"
+dynamic = ["version"]
+description = "Collection of Python tools and helpers designed to automate common Unreal Engine project tasks (builds, packaging, editor control, CI tasks, etc.)."
+readme.content-type = "text/markdown"
+readme.file = "README.md"
+keywords = [
+  "unreal engine"
+]
+license = {file = "LICENSE"}
+maintainers = [
+  { name = "Michael Delva", email = "michael@emidee.net" },
+]
+authors = [
+  { name = "Michael Delva", email = "michael@emidee.net" },
+]
+requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3.9",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "annotated-types==0.7.0",
+  "boto3==1.39.15",
+  "botocore==1.39.15",
+  "colorama==0.4.6",
+  "jmespath==1.0.1",
+  "MarkupSafe==3.0.2",
+  "packaging==24.2",
+  "psutil==6.1.1",
+  "python-dateutil==2.9.0.post0",
+  "PyYAML==6.0.2",
+  "s3transfer==0.13.1",
+  "six==1.17.0",
+  "tqdm==4.67.1",
+  "typing-inspection==0.4.1",
+  "typing_extensions==4.14.0",
+  "urllib3==2.5.0"
+]
+
+urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
+urls.Homepage = "https://github.com/TheEmidee/UEPyScripts"
+urls.Source = "https://github.com/TheEmidee/UEPyScripts"
+urls.Tracker = "https://github.com/TheEmidee/UEPyScripts/issues"
+
+[project.optional-dependencies]
+lint = [ 
+  "ruff>=0.1.0",
+  "mypy>=1.10.0"
+]
+
+dist = [
+  "hatchling>=1.26",
+  "build==1.4.0",
+  "wheel==0.45.1",
+  "twine==6.2.0",
+]
+
+dev = ["UEPyScripts[lint, dist]"]
+
+[tool.ruff]
+line-length = 150
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle
+    "I",   # isort
+    "ANN", # flake8 type annotations
+    "RUF", # ruff-specific rules
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+disallow_untyped_defs = true
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uepyscripts"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+exclude = [
+    "/.git",
+    "/.github",
+    "/.pytest_cache",
+    "/__pycache__",
+]
+
+[project.scripts]
+run-buildgraph = "uepyscripts.run.buildgraph.main"
