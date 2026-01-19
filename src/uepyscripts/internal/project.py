@@ -1,7 +1,8 @@
-from uepyscripts import logger
-from pathlib import Path
 import json
 import os
+from pathlib import Path
+
+from uepyscripts import logger
 
 
 class ProjectSavedFolders:

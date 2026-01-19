@@ -1,13 +1,12 @@
 import argparse
 import os
-from pathlib import Path
-import socket
 import shutil
+import socket
+from pathlib import Path
 from typing import List
 
 from ... import logger
-from ...context import config
-from ...context import project
+from ...context import config, project
 from ...run import buildgraph
 
 
@@ -84,7 +83,7 @@ def try_delete_local_buildgraph_folder(build_tag: str) -> None:
             file.write(build_tag)
 
     if ci_task_version_file.exists():
-        logger.info(f"Found CITaskVersionFile.txt")
+        logger.info("Found CITaskVersionFile.txt")
         with open(ci_task_version_file, "r") as file:
             current_build_tag = file.read().strip()
             if current_build_tag != build_tag:

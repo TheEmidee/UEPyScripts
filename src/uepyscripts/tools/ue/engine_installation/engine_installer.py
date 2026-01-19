@@ -1,11 +1,10 @@
 from pathlib import Path
 from typing import List
 
-
 from .... import logger
 from ....internal.config import resolve_config
-from ....internal.project import Project
 from ....internal.engine import resolve_engine
+from ....internal.project import Project
 from ....tools.helpers import is_7z_installed
 from ....tools.ue.engine_installation.engine_destination import resolve_engine_destination
 from ....tools.ue.engine_installation.engine_source import resolve_engine_source

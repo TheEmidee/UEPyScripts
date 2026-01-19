@@ -1,15 +1,11 @@
 import argparse
 import json
-
-from pathlib import Path
 import re
-import shlex
+from pathlib import Path
 from typing import Any, Dict, List
 
 from .. import logger
-from ..context import engine
-from ..context import project
-from ..context import config
+from ..context import config, engine, project
 
 
 def run(target: str, properties: dict[str, str], extra_arguments: list[str]):

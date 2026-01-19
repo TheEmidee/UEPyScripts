@@ -1,11 +1,12 @@
-from uepyscripts import logger
-from uepyscripts.internal.project import Project
-from pathlib import Path
-from packaging.version import Version
-from uepyscripts.internal.engine_resolver import resolve_engine_path
-
 import json
 import subprocess
+from pathlib import Path
+
+from packaging.version import Version
+
+from uepyscripts import logger
+from uepyscripts.internal.engine_resolver import resolve_engine_path
+from uepyscripts.internal.project import Project
 
 
 class Engine:

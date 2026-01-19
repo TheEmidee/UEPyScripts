@@ -1,9 +1,9 @@
-from uepyscripts.internal.project import Project
-from pathlib import Path
-from uepyscripts import logger
-
-import os
 import configparser
+import os
+from pathlib import Path
+
+from uepyscripts import logger
+from uepyscripts.internal.project import Project
 
 
 class Config:

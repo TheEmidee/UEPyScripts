@@ -1,11 +1,12 @@
 import os
-import boto3
-import tqdm
 import threading
-from botocore.exceptions import ClientError
 from pathlib import Path
 from typing import List
 from urllib.parse import quote
+
+import boto3
+import tqdm
+from botocore.exceptions import ClientError
 
 
 class S3Client:

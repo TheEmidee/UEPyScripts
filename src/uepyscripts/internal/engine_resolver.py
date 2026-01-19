@@ -1,6 +1,5 @@
-import winreg
 import os
-
+import winreg
 from pathlib import Path
 
 from ..internal.project import Project

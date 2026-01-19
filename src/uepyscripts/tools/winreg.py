@@ -1,5 +1,5 @@
-from pathlib import Path
 import winreg
+from pathlib import Path
 
 from uepyscripts import logger
 

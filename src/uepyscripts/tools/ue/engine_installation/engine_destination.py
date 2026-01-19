@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from .... import logger
-from ....internal.config import resolve_config
 from ....internal.project import Project
 from ....tools.helpers import get_env_var_value
 

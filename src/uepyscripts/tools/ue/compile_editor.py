@@ -1,5 +1,4 @@
-from uepyscripts.context import engine
-from uepyscripts.context import project
+from uepyscripts.context import engine, project
 
 engine.build(
     [

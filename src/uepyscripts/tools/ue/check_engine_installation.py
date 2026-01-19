@@ -17,11 +17,10 @@ which is useful when executed on a build pipeline like Jenkins or Horde.
 
 import argparse
 
-
-from ...internal.project import resolve_project
-from ...internal.engine import resolve_engine
-from ...tools.ue.engine_installation.engine_installer import EngineInstaller
 from ... import logger
+from ...internal.engine import resolve_engine
+from ...internal.project import resolve_project
+from ...tools.ue.engine_installation.engine_installer import EngineInstaller
 
 
 def parse_arguments():
@@ -58,7 +57,7 @@ def main():
             task_list.print()
             task_list.execute(args.unattended)
 
-            logger.info(f"Engine installation completed successfully.")
+            logger.info("Engine installation completed successfully.")
         except Exception as e:
             logger.fatal(f"Error when installing the engine: {e}")
             exit(1)

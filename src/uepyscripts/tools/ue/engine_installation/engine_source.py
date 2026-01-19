@@ -1,11 +1,11 @@
+import winreg
 from abc import ABC, abstractmethod
 from pathlib import Path
 from urllib.parse import quote
-import winreg
 
 from .... import logger
+from ....internal.config import Config
 from ....internal.project import Project
-from ....internal.config import Config, resolve_config
 from ....tools.helpers import copy_with_robocopy, is_engine_from_egs
 from ....tools.s3.s3_client import S3Client
 from ....tools.winreg import write_registry_value
@@ -62,7 +62,7 @@ class EngineSourceEGS(EngineSource):
 
 class EngineSourceInstalledBuild(EngineSource):
     def get_finalize_engine_operation_description(self, destination_folder: Path) -> str:
-        return f"Update the registry to add the key '{self.project.engine_association}' with the value '{str(destination_folder)}' to the key 'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds'"
+        return f"Update the registry to add the key '{self.project.engine_association}' with the value '{destination_folder!s}' to the key 'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds'"
 
     def finalize_engine_installation(self, destination_folder: Path) -> bool:
         return write_registry_value(

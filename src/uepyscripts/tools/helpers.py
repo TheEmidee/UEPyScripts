@@ -1,12 +1,9 @@
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
-import subprocess
-import os
-import platform
-
 from datetime import datetime
 from pathlib import Path
 
@@ -103,7 +100,7 @@ def copy_with_robocopy(source: Path, destination: Path, threads=8) -> bool:
         # 1 = Files copied successfully
         # 2+ = Some files or directories could not be copied
         if process.returncode < 8:
-            logger.info(f"\n✓ Copy completed successfully!")
+            logger.info("\n✓ Copy completed successfully!")
             return True
         else:
             logger.error(f"\n✗ Copy completed with errors (exit code: {process.returncode})")
@@ -184,7 +181,7 @@ def decompress_7z(archive_path: Path, output_dir: Path = None, threads: int = -1
         logger.error(f"Error output: {e.stderr}")
         return False
     except FileNotFoundError:
-        logger.error(f"7-zip executable not found. Please install 7-zip and ensure it's in your PATH.")
+        logger.error("7-zip executable not found. Please install 7-zip and ensure it's in your PATH.")
         return False
 
 

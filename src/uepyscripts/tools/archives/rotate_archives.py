@@ -10,7 +10,6 @@ directories keeping only the specified number of most recent ones.
 import argparse
 import shutil
 import sys
-
 from pathlib import Path
 
 from ...tools.helpers import get_date_formatted_name

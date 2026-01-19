@@ -1,6 +1,6 @@
 import argparse
-import os
 import importlib.util
+import os
 
 from uepyscripts import logger
 
