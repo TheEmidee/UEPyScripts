@@ -107,9 +107,7 @@ def write_output_file(output_path: Path, renamed_folder_path: Path):
 def parse_arguments():
     """Parse command line arguments."""
 
-    parser = argparse.ArgumentParser(
-        description="Rename directory to current date and cleanup old directories"
-    )
+    parser = argparse.ArgumentParser(description="Rename directory to current date and cleanup old directories")
     parser.add_argument("--directory_path", help="Path to the directory to rename")
     parser.add_argument(
         "--keep_count",
@@ -123,6 +121,7 @@ def parse_arguments():
     )
 
     return parser.parse_args()
+
 
 def main():
     args = parse_arguments()

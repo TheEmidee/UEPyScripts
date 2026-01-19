@@ -1,10 +1,11 @@
 from uepyscripts import logger
 from pathlib import Path
 import json
-import os 
+import os
+
 
 class ProjectSavedFolders:
-    def __init__(self, saved_folder : Path):
+    def __init__(self, saved_folder: Path):
         self.buildgraph = saved_folder.joinpath("BuildGraph")
         self.jenkins = saved_folder.joinpath("Jenkins")
         self.temp = saved_folder.joinpath("Temp")
@@ -12,20 +13,22 @@ class ProjectSavedFolders:
         self.local_builds = saved_folder.joinpath("LocalBuilds")
         self.staged_builds = saved_folder.joinpath("StagedBuilds")
 
+
 class ProjectFolders:
-    def __init__(self, root_folder : Path):
+    def __init__(self, root_folder: Path):
         self.config = root_folder.joinpath("Config")
         self.saved = root_folder.joinpath("Saved")
         self.saved_folders = ProjectSavedFolders(self.saved)
 
+
 class Project:
-    def __init__(self, uproject_path : Path):
+    def __init__(self, uproject_path: Path):
         self.uproject_path = uproject_path.resolve()
         self.project_name = uproject_path.stem
         self.root_folder = uproject_path.parent
         self.project_folders = ProjectFolders(self.root_folder)
 
-        with open(self.uproject_path, 'r') as f:
+        with open(self.uproject_path, "r") as f:
             uproject_json = json.load(f)
             self.engine_association = uproject_json["EngineAssociation"]
 
@@ -39,28 +42,27 @@ class Project:
 ----- Project infos -----
         """
 
-def find_parent_with_project_file(
-    starting_path : Path,
-    max_parents : int = 10
-    ):
+
+def find_parent_with_project_file(starting_path: Path, max_parents: int = 10):
     current_path = Path(starting_path).resolve()
 
     search_paths = [current_path, *current_path.parents[:max_parents]]
-    
+
     for path in search_paths:
         for file in path.iterdir():
             if file.is_file() and file.suffix == ".uproject":
                 return file.resolve()
-    
+
     return None
 
-def resolve_project() -> Project :
+
+def resolve_project() -> Project:
     dir_path = os.path.dirname(os.path.realpath(__file__))
 
     uproject_path = find_parent_with_project_file(dir_path)
     if not uproject_path:
         raise Exception(f"Could not find a uproject file from {dir_path}")
-    
+
     logger.debug(f"Found uproject file at {uproject_path}")
     project = Project(uproject_path)
 
