@@ -2,13 +2,13 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 from .. import logger
 from ..context import config, engine, project
 
 
-def run(target: str, properties: dict[str, str], extra_arguments: list[str]):
+def run(target: str, properties: dict[str, str], extra_arguments: list[str]) -> int:
     logger.info(f"Run Buildgraph - Target : {target}")
     logger.debug(f"Extra Properties : {properties}")
     logger.debug(f"Extra Parameters : {extra_arguments}")
@@ -32,13 +32,14 @@ def run(target: str, properties: dict[str, str], extra_arguments: list[str]):
 
     arguments.append(f'-Project="{project.uproject_path}"')
 
-    automation_scripts_paths = config["Project"]["AutomationScriptsDirectories"]
-    if automation_scripts_paths == "":
+    automation_scripts_directories = config["Project"]["AutomationScriptsDirectories"]
+    if automation_scripts_directories == "" or automation_scripts_directories is None:
         logger.info("No automation scripts directory is set")
     else:
-        automation_scripts_paths = automation_scripts_paths.split("+")
+        automation_scripts_paths = automation_scripts_directories.split("+")
 
-        for automation_scripts_path in automation_scripts_paths:
+        for automation_scripts_path_str in automation_scripts_paths:
+            automation_scripts_path = Path(automation_scripts_path_str)
             automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
             if not automation_scripts_path.exists():
                 logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
@@ -63,8 +64,7 @@ def run(target: str, properties: dict[str, str], extra_arguments: list[str]):
         for arg in extra_arguments:
             arguments.append(arg)
 
-    if engine.uat(arguments) != 0:
-        raise RuntimeError("Error while running UAT")
+    return engine.uat(arguments)
 
 
 def load_config_from_file(config_file_path: Path) -> Dict[str, Any]:
@@ -110,7 +110,7 @@ def extract_config_values(config_data: Dict[str, Any]) -> tuple[str, Dict[str, s
     return target, properties, extra_arguments
 
 
-def parse_arguments(argv=None):
+def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task based on a target and properties.")
     parser.add_argument("--target", type=str, default="", help="The target to run in the buildgraph file")
@@ -131,7 +131,7 @@ def parse_arguments(argv=None):
         "--string_arguments",
         type=str,
         default="",
-        help="Space separated lists of arguments to pass as extra_argumentsJSON string representing an array of extra arguments to pass to buildgraph. "
+        help="Space separated lists of arguments to pass as extra_arguments "
         'Ex: \'"item1" "item2" "item3"\'',
     )
     parser.add_argument("--config_file", type=str, default="", help="Path to a JSON file containing the target, properties, and extra arguments")
@@ -152,12 +152,12 @@ def validate_config(target: str, properties: Dict[str, str], extra_arguments: Li
         raise TypeError("Extra arguments must be a list")
 
 
-def main(argv=None):
+def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_arguments(argv)
 
     target = ""
-    properties = {}
-    extra_arguments = []
+    properties : dict[str,str] = {}
+    extra_arguments : list[str] = []
 
     if args.config_file:
         config_file_path = Path(args.config_file)
@@ -198,7 +198,7 @@ def main(argv=None):
     logger.debug(f"Extra arguments: {extra_arguments}")
 
     try:
-        run(target, properties, extra_arguments)
+        return run(target, properties, extra_arguments)
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         raise e

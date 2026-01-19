@@ -1,6 +1,7 @@
 import winreg
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any, Optional, Type
 from urllib.parse import quote
 
 from .... import logger
@@ -12,20 +13,20 @@ from ....tools.winreg import write_registry_value
 
 
 class EngineSource(ABC):
-    _registry = {}
+    _registry : dict[str,Type["EngineSource"]] = {}
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: dict[str, Any]) -> None:
         super().__init_subclass__(**kwargs)
         name = cls.__name__.replace("EngineSource", "")
         cls._registry[name] = cls
 
-    def __init__(self, project: Project, config: Config):
+    def __init__(self, project: Project, config: Config) -> None:
         self.project = project
         self.config = config
-        self.source_file = None
+        self.source_file : str
 
     @classmethod
-    def get_source(cls, name):
+    def get_source(cls, name : str) -> Optional[Type["EngineSource"]]:
         return cls._registry.get(name)
 
     @abstractmethod
@@ -36,7 +37,7 @@ class EngineSource(ABC):
     def copy_engine_to(self, destination_folder: Path) -> bool:
         pass
 
-    def get_source_full_path(self) -> Path:
+    def get_source_full_path(self) -> str:
         return self.source_file
 
     def get_finalize_engine_operation_description(self, destination_folder: Path) -> str:
@@ -62,7 +63,10 @@ class EngineSourceEGS(EngineSource):
 
 class EngineSourceInstalledBuild(EngineSource):
     def get_finalize_engine_operation_description(self, destination_folder: Path) -> str:
-        return f"Update the registry to add the key '{self.project.engine_association}' with the value '{destination_folder!s}' to the key 'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds'"
+        return (
+            f"Update the registry to add the key '{self.project.engine_association}' with the value '{destination_folder!s}'"
+            " to the key 'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds'"
+        )
 
     def finalize_engine_installation(self, destination_folder: Path) -> bool:
         return write_registry_value(
@@ -86,7 +90,7 @@ class EngineSourceLocal(EngineSourceInstalledBuild):
                 ]
 
                 if matching_files:
-                    self.source_file = Path(sorted(matching_files, key=lambda p: p.name)[-1])
+                    self.source_file = sorted(matching_files, key=lambda p: p.name)[-1]
                     logger.info(f"Found local engine source at '{self.source_file}'")
                     return True
 
@@ -100,11 +104,11 @@ class EngineSourceLocal(EngineSourceInstalledBuild):
         return False
 
     def copy_engine_to(self, destination_folder: Path) -> bool:
-        return copy_with_robocopy(self.source_file, destination_folder)
+        return copy_with_robocopy(Path(self.source_file), destination_folder)
 
 
 class EngineSourceAWS(EngineSourceInstalledBuild):
-    def __init__(self, project, config):
+    def __init__(self, project : Project, config : Config) -> None:
         super().__init__(project, config)
         self.s3_client = S3Client(
             access_key=self.config["EngineUpdate.Source.AWS"]["AWS_AccessKey"],
@@ -121,11 +125,14 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
 
         if not files:
             logger.info(
-                f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket '{self.config['EngineUpdate.Source.AWS']['AWS_BucketName']}' in the folder 'Engine'"
+                (
+                    f"No engine source found in AWS S3 for '{self.project.engine_association}' in the bucket"
+                    f"{self.config['EngineUpdate.Source.AWS']['AWS_BucketName']}' in the folder 'Engine'"
+                )
             )
             return False
 
-        self.source_file = Path(sorted(files)[-1])
+        self.source_file = sorted(files)[-1]
         logger.info(f"Found engine source in AWS S3: '{self.source_file}' in the bucket '{self.config['EngineUpdate.Source.AWS']['AWS_BucketName']}'")
 
         return True
@@ -136,9 +143,9 @@ class EngineSourceAWS(EngineSourceInstalledBuild):
         )
 
     def _get_bucket_name(self) -> str:
-        return self.config["EngineUpdate.Source.AWS"]["AWS_BucketName"]
+        return str(self.config["EngineUpdate.Source.AWS"]["AWS_BucketName"])
 
-    def get_source_full_path(self) -> Path:
+    def get_source_full_path(self) -> str:
         base_url = f"https://{self._get_bucket_name()}.s3.amazonaws.com"
 
         # URL encode the key to handle special characters

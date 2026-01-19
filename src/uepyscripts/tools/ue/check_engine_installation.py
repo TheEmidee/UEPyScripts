@@ -23,7 +23,7 @@ from ...internal.project import resolve_project
 from ...tools.ue.engine_installation.engine_installer import EngineInstaller
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
     parser.add_argument("--unattended", action="store_true", help="Disable interactive prompts")
@@ -31,7 +31,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     """Main function."""
     logger.info("Starting Unreal Engine installation check...")
     args = parse_arguments()

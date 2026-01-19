@@ -37,6 +37,9 @@ dependencies = [
   "s3transfer==0.13.1",
   "six==1.17.0",
   "tqdm==4.67.1",
+  "types-psutil==7.2.1.20260116",
+  "types-requests==2.32.4.20260107",
+  "types-tqdm==4.67.0.20250809",
   "typing-inspection==0.4.1",
   "typing_extensions==4.14.0",
   "urllib3==2.5.0"

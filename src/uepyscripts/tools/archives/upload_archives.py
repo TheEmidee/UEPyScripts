@@ -16,10 +16,10 @@ import sys
 from pathlib import Path
 
 from ...tools.helpers import get_date_formatted_name
-from ...tools.s3.s3_client import S3Client
+from ...tools.s3.s3_client import S3Client, S3UploadedObject
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Upload a folder to S3 with cleanup of old versions and generate download URLs")
     parser.add_argument("--local_folder", help="Path to the local folder to upload")
@@ -36,7 +36,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def write_download_urls(uploaded_objects, output_file):
+def write_download_urls(uploaded_objects : list[S3UploadedObject], output_file : Path) -> None:
     """Write download URLs to output file in format 'URL : FileName'."""
     try:
         output_path = Path(output_file)
@@ -44,9 +44,7 @@ def write_download_urls(uploaded_objects, output_file):
 
         with open(output_file, "w", encoding="utf-8") as f:
             for obj in uploaded_objects:
-                # Extract just the filename from the local path
-                filename = Path(obj["local_path"]).name
-                f.write(f"{obj['download_url']} : {filename}\n")
+                f.write(f"{obj.download_url} : {obj.file_path.name}\n")
 
         print(f"Download URLs written to: {output_file}")
         print(f"Total URLs generated: {len(uploaded_objects)}")
@@ -55,7 +53,7 @@ def write_download_urls(uploaded_objects, output_file):
         print(f"Error writing download URLs to file: {e}")
 
 
-def main():
+def main() -> None:
     """Main function."""
     args = parse_arguments()
 
@@ -87,7 +85,7 @@ def main():
 
     if args.output_file:
         # Write download URLs to output file
-        write_download_urls(uploaded_objects, args.output_file)
+        write_download_urls(uploaded_objects, Path(args.output_file))
 
     # Cleanup old folders
     s3_client.cleanup_old_folders(args.bucket_name, args.keep_count)

@@ -11,7 +11,7 @@ from uepyscripts.internal.project import Project
 
 class Engine:
     class Runner:
-        def __init__(self, path: Path, capture_output: bool, wait_process: bool = True, extra_args: list[str] = []):
+        def __init__(self, path: Path, capture_output: bool, wait_process: bool = True, extra_args: list[str] = []) -> None:
             if not path.exists():
                 raise FileNotFoundError(f"The file {path} does not exist")
 
@@ -24,7 +24,7 @@ class Engine:
             logger.debug(f"run process for {self.path} with arguments {args}")
 
             try:
-                all_args = [self.path]
+                all_args = [str(self.path)]
 
                 if self.extra_args is not None:
                     all_args += self.extra_args
@@ -35,7 +35,7 @@ class Engine:
                 all_args_str = " ".join(map(str, all_args))
 
                 if self.capture_output:
-                    process = subprocess.Popen(
+                    process_str : subprocess.Popen[str] = subprocess.Popen(
                         all_args_str,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -43,19 +43,21 @@ class Engine:
                         text=True,  # Handle text encoding automatically
                     )
 
-                    for line in iter(process.stdout.readline, ""):
+                    assert process_str.stdout is not None
+
+                    for line in iter(process_str.stdout.readline, ""):
                         if line:
                             logger.info(line.rstrip("\n"))
 
-                    process.wait()
-                    return process.returncode
+                    process_str.wait()
+                    return process_str.returncode
                 else:
-                    process = subprocess.Popen(all_args, stdout=subprocess.PIPE)
+                    process_bytes : subprocess.Popen[bytes] = subprocess.Popen(all_args, stdout=subprocess.PIPE)
 
                     if not self.wait_process:
                         return 0
 
-                    return process.wait()
+                    return process_bytes.wait()
 
             except subprocess.CalledProcessError as e:
                 logger.fatal(f"Error occured when running {self.path}. ")
@@ -65,28 +67,28 @@ class Engine:
 
                 return -1
 
-    def __init__(self, project: Project):
+    def __init__(self, project: Project) -> None:
         self.project = project
         self.root_path = resolve_engine_path(project)
         self.path = self.root_path.joinpath("Engine").resolve()
         self.version = self.get_version_number()
         self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"), True)
         self.ubt_path = self.Runner(
-            self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"), True, [str(self.project.uproject_path)]
+            self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"), True, True, [str(self.project.uproject_path)]
         )
         self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"), True)
         self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False, False, [str(self.project.uproject_path)])
 
-    def uat(self, args: list[str] = None) -> int:
+    def uat(self, args: list[str] = []) -> int:
         return self.uat_path.run(args)
 
-    def ubt(self, args: list[str] = None) -> int:
+    def ubt(self, args: list[str] = []) -> int:
         return self.ubt_path.run(args)
 
-    def build(self, args: list[str] = None) -> int:
+    def build(self, args: list[str] = []) -> int:
         return self.build_bat_path.run(args)
 
-    def run_editor(self, args: list[str] = None) -> int:
+    def run_editor(self, args: list[str] = []) -> int:
         return self.editor_exe_path.run(args)
 
     def get_version_number(self) -> Version:
@@ -113,7 +115,7 @@ class Engine:
     def get_short_version_number(self) -> str:
         return f"{self.version.major}.{self.version.minor}"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"""
 ----- Engine infos -----
 * Path : {self.path}

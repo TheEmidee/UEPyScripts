@@ -1,32 +1,32 @@
 from pathlib import Path
-from typing import List
+from typing import Callable, List, Optional
 
 from .... import logger
 from ....internal.config import resolve_config
 from ....internal.engine import resolve_engine
 from ....internal.project import Project
-from ....tools.helpers import is_7z_installed
+from ....tools.helpers import decompress_7z, is_7z_installed
 from ....tools.ue.engine_installation.engine_destination import resolve_engine_destination
 from ....tools.ue.engine_installation.engine_source import resolve_engine_source
 
 
 class Task:
-    def __init__(self, task_description: str, func):
+    def __init__(self, task_description: str, func : Callable[[], Optional[bool]]) -> None:
         self.task_description = task_description
         self.func = func
 
-    def execute(self):
-        self.func()
+    def execute(self) -> Optional[bool]:
+        return self.func()
 
 
 class TaskList:
-    def __init__(self):
-        self.tasks = []
+    def __init__(self) -> None:
+        self.tasks : list[Task] = []
 
-    def add_task(self, task: Task):
+    def add_task(self, task: Task) -> None:
         self.tasks.append(task)
 
-    def execute(self, unattended: bool = False):
+    def execute(self, unattended: bool = False) -> None:
         if not unattended:
             while True:
                 prompt = (
@@ -53,7 +53,7 @@ class TaskList:
                 logger.fatal(f"Error: {e}")
                 raise e
 
-    def print(self):
+    def print(self) -> None:
         logger.info("")
         logger.info("The following tasks will be performed:")
         for i, task in enumerate(self.tasks):
@@ -62,7 +62,7 @@ class TaskList:
 
 
 class EngineInstaller:
-    def __init__(self, project: Project, unattended: bool = False):
+    def __init__(self, project: Project, unattended: bool = False) -> None:
         self.check_requirements()
 
         self.project = project
@@ -77,7 +77,7 @@ class EngineInstaller:
         self.config = resolve_config(project)
         self.engine_source = resolve_engine_source(project, self.config)
 
-    def prompt_for_engine_destination(self):
+    def prompt_for_engine_destination(self) -> None:
         while True:
             prompt = (
                 "╔═══════════════════════════════════════════════════════════╗\n"
@@ -91,14 +91,15 @@ class EngineInstaller:
                 break
             print(f"The path '{response}' does not exist or is not a folder. Please enter a valid folder path.")
 
-    def check_requirements(self):
+    def check_requirements(self) -> None:
         if not is_7z_installed():
             raise RuntimeError("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
 
     def get_project_platforms(self) -> List[str]:
-        return self.config["EngineUpdate.TurnKey"]["Platforms"].split("+")
+        platforms : str = self.config["EngineUpdate.TurnKey"]["Platforms"]
+        return platforms.split("+")
 
-    def update_sdks(self, platforms: List[str]):
+    def update_sdks(self, platforms: List[str]) -> None:
         engine = resolve_engine(self.project)
         for platform in platforms:
             engine.uat(["turnkey", "-command=VerifySdk", f"-platform={platform}", "-UpdateIfNeeded", "-unattended"])
@@ -120,7 +121,10 @@ class EngineInstaller:
 
             tasks.add_task(
                 Task(
-                    f"Use the source '{self.engine_source.__class__.__name__}' to copy the engine source from '{source_full_path}' to '{self.engine_destination_folder}'",
+                    (
+                        f"Use the source '{self.engine_source.__class__.__name__}' to copy the engine source from "
+                        "'{source_full_path}' to '{self.engine_destination_folder}'"
+                    ),
                     lambda: self.engine_source.copy_engine_to(self.engine_destination_folder),
                 )
             )

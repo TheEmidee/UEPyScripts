@@ -7,7 +7,7 @@ from uepyscripts.internal.project import Project
 
 
 class Config:
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path) -> None:
         self.folder = folder
         self.config = configparser.ConfigParser()
 
@@ -20,7 +20,7 @@ class Config:
             logger.debug(f"Reading file: {ini_path}")
             self.config.read(ini_path)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key : str) -> configparser.SectionProxy:
         return self.config[key]
 
 

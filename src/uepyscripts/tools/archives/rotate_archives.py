@@ -41,7 +41,7 @@ def find_available_name(parent_dir: Path, base_name: str) -> str:
         counter += 1
 
 
-def cleanup_old_directories(parent_dir: Path, keep_count: int):
+def cleanup_old_directories(parent_dir: Path, keep_count: int) -> None:
     """
     Keep only the most recent X directories in the parent directory.
 
@@ -82,7 +82,7 @@ def cleanup_old_directories(parent_dir: Path, keep_count: int):
             print(f"  - Failed to remove {d.name}: {e}")
 
 
-def write_output_file(output_path: Path, renamed_folder_path: Path):
+def write_output_file(output_path: Path, renamed_folder_path: Path) -> None:
     """
     Writes the path of the last folder in the output path.
 
@@ -103,7 +103,7 @@ def write_output_file(output_path: Path, renamed_folder_path: Path):
         print(f"Warning: Failed to write to output file '{output_path}': {e}")
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
 
     parser = argparse.ArgumentParser(description="Rename directory to current date and cleanup old directories")
@@ -122,7 +122,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     args = parse_arguments()
 
     # Convert to Path object

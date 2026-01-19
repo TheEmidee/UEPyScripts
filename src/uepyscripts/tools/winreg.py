@@ -1,10 +1,11 @@
 import winreg
 from pathlib import Path
+from typing import Optional
 
 from uepyscripts import logger
 
 
-def get_registry_value(hkey: int, key_path: str, value_name: str) -> Path:
+def get_registry_value(hkey: int, key_path: str, value_name: str) -> Optional[Path]:
     full_path = f"{key_path}\\{value_name}"
 
     try:
@@ -15,8 +16,8 @@ def get_registry_value(hkey: int, key_path: str, value_name: str) -> Path:
         logger.debug(f"No string value in the registry for the key {full_path}")
     except Exception as e:
         logger.fatal(f"An error occurred when trying to read {full_path}: {e}")
-        return None
 
+    return None
 
 def write_registry_value(hkey: int, key_path: str, value_name: str, value_data: str) -> bool:
     full_path = f"{key_path}\\{value_name}"

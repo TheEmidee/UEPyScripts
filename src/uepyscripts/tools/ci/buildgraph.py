@@ -3,7 +3,7 @@ import os
 import shutil
 import socket
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Sequence
 
 from ... import logger
 from ...context import config, project
@@ -25,7 +25,7 @@ def update_or_add_argument(args_list: List[str], arg_name: str, new_values: List
     while i < len(args_list):
         if args_list[i] == arg_name:
             updated_args.append(args_list[i])
-            updated_args.append(" ".join([args_list[i + 1]] + new_values))
+            updated_args.append(" ".join([args_list[i + 1], *new_values]))
             i += 2
             found = True
         elif args_list[i].startswith(f"{arg_name}="):
@@ -49,7 +49,7 @@ def update_or_add_argument(args_list: List[str], arg_name: str, new_values: List
     return updated_args
 
 
-def parse_arguments(argv=None):
+def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task using a shared storage.")
     parser.add_argument("--target", type=str, help="The target to run in the buildgraph file")
@@ -75,7 +75,7 @@ def try_delete_local_buildgraph_folder(build_tag: str) -> None:
 
     logger.info(f"Managing file CITaskVersionFile.txt in {buildgraph_local_folder}")
 
-    def write_tag_to_file():
+    def write_tag_to_file() -> None:
         logger.info(f"Writing build tag {build_tag} to {ci_task_version_file}")
         Path(buildgraph_local_folder).mkdir(parents=True, exist_ok=True)
 
@@ -95,8 +95,8 @@ def try_delete_local_buildgraph_folder(build_tag: str) -> None:
         write_tag_to_file()
 
 
-def cleanup_local_folder():
-    def remove_folder(folder: Path):
+def cleanup_local_folder() -> None:
+    def remove_folder(folder: Path) -> None:
         if folder.exists():
             logger.info(f"Removing folder: {folder}")
             shutil.rmtree(folder, ignore_errors=True)
@@ -105,7 +105,7 @@ def cleanup_local_folder():
     remove_folder(project.project_folders.saved_folders.tests)
 
 
-def main(argv=None):
+def main(argv: Optional[Sequence[str]] = None) -> int:
     args, unknown_args = parse_arguments(argv)
 
     if not args.build_tag:
@@ -129,7 +129,7 @@ def main(argv=None):
         ["-BuildMachine", f'-SharedStorageDir="{shared_storage_dir}"', "-WriteToSharedStorage", f'-SingleNode="{args.target}"', "-NoP4"],
     )
 
-    buildgraph.main(updated_args)
+    return buildgraph.main(updated_args)
 
 
 if __name__ == "__main__":

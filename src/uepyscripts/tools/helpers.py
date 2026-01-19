@@ -6,15 +6,16 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from uepyscripts import logger
 
 
 def is_engine_from_egs(engine_version: str) -> bool:
-    return re.search(r"^[45]\.[0-9]+(EA)?$", engine_version)
+    return re.search(r"^[45]\.[0-9]+(EA)?$", engine_version) is not None
 
 
-def get_env_var_value() -> str:
+def get_env_var_value() -> Optional[str]:
     key = "NODE_UE_ROOT"
 
     if key in os.environ:
@@ -23,7 +24,7 @@ def get_env_var_value() -> str:
     return None
 
 
-def get_engine_root_folder_from_env_var(project_engine_association: str = None) -> Path:
+def get_engine_root_folder_from_env_var(project_engine_association: str) -> Optional[Path]:
     node_ue_root = get_env_var_value()
 
     if node_ue_root:
@@ -38,7 +39,7 @@ def get_engine_root_folder_from_env_var(project_engine_association: str = None) 
     return None
 
 
-def copy_with_robocopy(source: Path, destination: Path, threads=8) -> bool:
+def copy_with_robocopy(source: Path, destination: Path, threads : int = 8) -> bool:
     """
     Copy a file using Robocopy with multithreading for maximum speed.
 
@@ -68,10 +69,10 @@ def copy_with_robocopy(source: Path, destination: Path, threads=8) -> bool:
     # Create destination directory if it doesn't exist
     os.makedirs(destination, exist_ok=True)
 
-    cmd = [
+    cmd : list[str] = [
         "robocopy",
         source_dir,  # Source directory
-        destination,  # Destination directory
+        str(destination),  # Destination directory
         filename,  # File to copy
         f"/MT:{threads}",  # Multithreaded
         "/J",  # Unbuffered I/O
@@ -87,6 +88,9 @@ def copy_with_robocopy(source: Path, destination: Path, threads=8) -> bool:
     try:
         # Run Robocopy
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
+
+        assert process.stdout is not None
+        assert process.stderr is not None
 
         # Print output in real-time
         for line in process.stdout:
@@ -115,7 +119,7 @@ def copy_with_robocopy(source: Path, destination: Path, threads=8) -> bool:
         return False
 
 
-def decompress_7z(archive_path: Path, output_dir: Path = None, threads: int = -1) -> bool:
+def decompress_7z(archive_path: Path, output_dir: Optional[Path] = None, threads: int = -1) -> bool:
     """
     Decompress a 7z archive using 7-zip with multi-threading support.
 
@@ -137,17 +141,17 @@ def decompress_7z(archive_path: Path, output_dir: Path = None, threads: int = -1
 
     # Set output directory
     if output_dir is None:
-        output_dir = os.path.dirname(archive_path) or "."
+        output_dir = Path(os.path.dirname(archive_path) or ".")
 
     # Set thread count (default to CPU count)
     if threads == -1:
-        threads = os.cpu_count()
+        threads = os.cpu_count() or -11
 
     # Build command
-    cmd = [
+    cmd : list[str] = [
         seven_zip,
         "x",  # Extract with full paths
-        archive_path,
+        str(archive_path),
         f"-o{output_dir}",  # Output directory (no space after -o)
         f"-mmt{threads}",  # Multi-threading
         "-y",  # Yes to all prompts
@@ -156,6 +160,9 @@ def decompress_7z(archive_path: Path, output_dir: Path = None, threads: int = -1
     try:
         # Run 7z process
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
+
+        assert process.stdout is not None
+        assert process.stderr is not None
 
         # Read and display output in real-time
         for line in process.stdout:
