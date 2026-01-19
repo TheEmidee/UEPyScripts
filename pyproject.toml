@@ -117,4 +117,4 @@ exclude = [
 ]
 
 [project.scripts]
-run-buildgraph = "uepyscripts.run.buildgraph.main"
+run-buildgraph = "uepyscripts.run.buildgraph:main"

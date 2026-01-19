@@ -27,6 +27,31 @@ if (!(Test-Path $PyProjectFile)) {
     }
 }
 
+# Function to get file hash
+function Get-FileHashString {
+    param([string]$FilePath)
+    if (Test-Path $FilePath) {
+        $hash = Get-FileHash -Path $FilePath -Algorithm SHA256
+        return $hash.Hash
+    }
+    return $null
+}
+
+# Hash tracking file
+$hashFile = ".\$VenvName\.requirements_hash"
+
+# Get current hash of pyproject.toml
+$currentHash = Get-FileHashString -FilePath $PyProjectFile
+
+# Get stored hash if it exists
+$storedHash = $null
+if (Test-Path $hashFile) {
+    $storedHash = Get-Content $hashFile -Raw
+}
+
+# Check if requirements have changed
+$requirementsChanged = ($currentHash -ne $storedHash) -or $Force
+
 # Remove existing virtual environment if Force flag is used
 if ($Force -and (Test-Path $VenvName)) {
     Write-Host "Removing existing virtual environment..." -ForegroundColor Yellow
@@ -43,6 +68,7 @@ if (!(Test-Path $VenvName)) {
         exit 1
     }
     Write-Host "Virtual environment created successfully!" -ForegroundColor Green
+    $requirementsChanged = $true  # Force install on new venv
 } else {
     Write-Host "Virtual environment '$VenvName' already exists" -ForegroundColor Yellow
 }
@@ -60,15 +86,21 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Upgrading pip..." -ForegroundColor Yellow
 python -m pip install --upgrade pip
 
-# Install requirements if file exists
+# Install requirements only if they changed
 if (Test-Path $PyProjectFile) {
-    Write-Host "Installing packages from $PyProjectFile..." -ForegroundColor Yellow
-    pip install -e .[dev]
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "All packages installed successfully!" -ForegroundColor Green
+    if ($requirementsChanged) {
+        Write-Host "Requirements have changed. Installing packages from $PyProjectFile..." -ForegroundColor Yellow
+        pip install -e .[dev]
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "All packages installed successfully!" -ForegroundColor Green
+            # Store the new hash
+            $currentHash | Out-File -FilePath $hashFile -NoNewline
+        } else {
+            Write-Host "Error: Some packages failed to install" -ForegroundColor Red
+        }
     } else {
-        Write-Host "Error: Some packages failed to install" -ForegroundColor Red
+        Write-Host "Requirements unchanged - skipping package installation" -ForegroundColor Cyan
     }
 } else {
     Write-Host "Skipping package installation - no requirements file found" -ForegroundColor Yellow
