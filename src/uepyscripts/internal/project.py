@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from pydantic import BaseModel, Field
 
 from uepyscripts import logger
 
@@ -22,6 +23,11 @@ class ProjectFolders:
         self.saved = root_folder.joinpath("Saved")
         self.saved_folders = ProjectSavedFolders(self.saved)
 
+class UProjectFile(BaseModel):
+    engine_association: str = Field(alias="EngineAssociation")
+
+    class Config:
+        populate_by_name = True
 
 class Project:
     def __init__(self, uproject_path: Path) -> None:
@@ -30,9 +36,13 @@ class Project:
         self.root_folder = uproject_path.parent
         self.project_folders = ProjectFolders(self.root_folder)
 
-        with open(self.uproject_path, "r") as f:
-            uproject_json = json.load(f)
-            self.engine_association = uproject_json["EngineAssociation"]
+        with open(self.uproject_path, "r", encoding="utf-8") as f:
+            json_str = f.read()
+            self.uproject = UProjectFile.model_validate_json(json_str)
+
+    @property
+    def engine_association(self) -> str:
+        return self.uproject.engine_association
 
     def __str__(self) -> str:
         return f"""

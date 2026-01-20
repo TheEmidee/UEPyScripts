@@ -1,19 +1,51 @@
 import argparse
-import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Optional, Sequence
+
+from pydantic import BaseModel, field_validator
 
 from .. import logger
 from ..context import config, engine, project
 
 
-def run(target: str, properties: dict[str, str], extra_arguments: list[str]) -> int:
-    logger.info(f"Run Buildgraph - Target : {target}")
-    logger.debug(f"Extra Properties : {properties}")
-    logger.debug(f"Extra Parameters : {extra_arguments}")
+class BuildgraphExecutionInfos(BaseModel):
+    target : str = ""
+    properties : dict[str, str] = {}
+    extra_arguments : list[str] = []
 
-    buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
+    @field_validator('properties', pre=True)
+    @classmethod
+    def parse_properties(cls, v : Any) -> dict[str, str]:  # noqa: ANN401
+        if isinstance(v, str):
+            import json
+            parsed = json.loads(v)
+            if not isinstance(parsed, dict):
+                raise ValueError("Properties must be a dictionary")
+            return {str(key): str(value) for key, value in parsed.items()}
+        return v
+    
+    @field_validator('extra_arguments', pre=True)
+    @classmethod
+    def parse_extra_arguments(cls, v : Any) -> list[str]:  # noqa: ANN401
+        if isinstance(v, str):
+            import json
+            parsed = json.loads(v)
+            if not isinstance(parsed, dict):
+                raise ValueError("Properties must be a dictionary")
+            return [str(item) for item in parsed]
+        return v
+
+    class Config:
+        populate_by_name = True
+
+
+def run(execution_infos : BuildgraphExecutionInfos) -> int:
+    logger.info(f"Run Buildgraph - Target : {execution_infos.target}")
+    logger.debug(f"Extra Properties : {execution_infos.properties}")
+    logger.debug(f"Extra Parameters : {execution_infos.extra_arguments}")
+
+    buildgraph_path = project.root_folder.joinpath(execution_infos["Project"]["BuildgraphPath"])
     logger.debug(f"Buildgraph XML path : {buildgraph_path}")
 
     if not buildgraph_path.exists():
@@ -27,8 +59,8 @@ def run(target: str, properties: dict[str, str], extra_arguments: list[str]) -> 
     arguments.append(f'-script="{buildgraph_path}"')
 
     # We can execute buildgraph without a target if the SingleNode argument is set
-    if target:
-        arguments.append(f'-target="{target}"')
+    if execution_infos.target:
+        arguments.append(f'-target="{execution_infos.target}"')
 
     arguments.append(f'-Project="{project.uproject_path}"')
 
@@ -54,60 +86,17 @@ def run(target: str, properties: dict[str, str], extra_arguments: list[str]) -> 
         for key, value in shared_properties.items():
             arguments.append(f"-set:{key}={value}")
 
-    if properties is not None:
-        for key, value in properties.items():
+    if execution_infos.properties is not None:
+        for key, value in execution_infos.properties.items():
             if " " in value:
                 value = f'"{value}"'
             arguments.append(f"-set:{key}={value}")
 
-    if extra_arguments is not None:
-        for arg in extra_arguments:
+    if execution_infos.extra_arguments is not None:
+        for arg in execution_infos.extra_arguments:
             arguments.append(arg)
 
     return engine.uat(arguments)
-
-
-def load_config_from_file(config_file_path: Path) -> Dict[str, Any]:
-    """Load configuration from JSON file."""
-    try:
-        with open(config_file_path, "r") as config_file:
-            config_data = json.load(config_file)
-            logger.debug(f"Config loaded from {config_file_path}")
-            return config_data
-    except (json.JSONDecodeError, FileNotFoundError) as e:
-        logger.error(f"Failed to load config file {config_file_path}: {e}")
-        raise
-
-
-def parse_json_argument(arg_value: str, arg_name: str, default_value: Any) -> Any:
-    """Parse JSON string argument with error handling."""
-    if not arg_value:
-        return default_value
-
-    try:
-        return json.loads(arg_value)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in {arg_name}: {e}")
-        raise argparse.ArgumentTypeError(f"Invalid JSON format in {arg_name}: {e}")
-
-
-def extract_config_values(config_data: Dict[str, Any]) -> tuple[str, Dict[str, str], List[str]]:
-    """Extract target, properties, and extra_arguments from config data."""
-    target = config_data.get("Target", "")
-
-    properties_raw = config_data.get("Properties", {})
-    if isinstance(properties_raw, str):
-        properties = parse_json_argument(properties_raw, "Properties", {})
-    else:
-        properties = properties_raw
-
-    extra_args_raw = config_data.get("ExtraArguments", [])
-    if isinstance(extra_args_raw, str):
-        extra_arguments = parse_json_argument(extra_args_raw, "ExtraArguments", [])
-    else:
-        extra_arguments = extra_args_raw
-
-    return target, properties, extra_arguments
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -138,67 +127,56 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def validate_config(target: str, properties: Dict[str, str], extra_arguments: List[str]) -> None:
+def validate_config(execution_infos : BuildgraphExecutionInfos) -> None:
     """Validate the configuration values."""
     pattern = r'-SingleNode="[^"]*"'
 
-    if not target and not any(re.search(pattern, item) for item in extra_arguments):
+    if not execution_infos.target and not any(re.search(pattern, item) for item in execution_infos.extra_arguments):
         raise ValueError("Target is required")
-
-    if not isinstance(properties, dict):
-        raise TypeError("Properties must be a dictionary")
-
-    if not isinstance(extra_arguments, list):
-        raise TypeError("Extra arguments must be a list")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_arguments(argv)
 
-    target = ""
-    properties : dict[str,str] = {}
-    extra_arguments : list[str] = []
+    execution_infos : BuildgraphExecutionInfos
 
     if args.config_file:
         config_file_path = Path(args.config_file)
         if config_file_path.exists():
-            config_data = load_config_from_file(config_file_path)
-            target, properties, extra_arguments = extract_config_values(config_data)
+            with open(config_file_path, "r", encoding="utf-8") as f:
+                json_str = f.read()
+                execution_infos = BuildgraphExecutionInfos.model_validate_json(json_str)
         else:
             logger.warning(f"Config file not found at {config_file_path}")
 
     if args.target:
-        target = args.target
+        execution_infos.target = args.target
 
     if args.properties:
         logger.debug(f"Properties from command line: {args.properties}")
-        properties = parse_json_argument(args.properties, "properties", {})
+        execution_infos.properties = args.properties
 
     if args.extra_arguments:
         logger.debug(f"Extra Arguments from command line: {args.extra_arguments}")
-        extra_arguments = parse_json_argument(args.extra_arguments, "extra_arguments", [])
+        execution_infos.extra_arguments = args.extra_arguments
 
-    def split_string_arguments(string_arguments: str) -> List[str]:
+    def split_string_arguments(string_arguments: str) -> list[str]:
         pattern = r'[^\s"]+="[^"]*"|[^\s"]+'
         return re.findall(pattern, string_arguments)
 
     # Split string arguments into a list. The regex captures quoted strings and unquoted words.
     # This allows for arguments like --arg="value with spaces" to be handled correctly
     string_arguments = split_string_arguments(args.string_arguments)
-    extra_arguments += string_arguments
+    execution_infos.extra_arguments += string_arguments
 
     try:
-        validate_config(target, properties, extra_arguments)
+        validate_config(execution_infos)
     except (ValueError, TypeError) as e:
         logger.error(f"Configuration validation failed: {e}")
         raise e
 
-    logger.info(f"Running target: {target}")
-    logger.debug(f"Properties: {properties}")
-    logger.debug(f"Extra arguments: {extra_arguments}")
-
     try:
-        return run(target, properties, extra_arguments)
+        return run(execution_infos)
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         raise e
