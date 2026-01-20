@@ -1,7 +1,7 @@
 import winreg
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Optional, Type
+from typing import Any, ClassVar, Optional, Type
 from urllib.parse import quote
 
 from .... import logger
@@ -13,7 +13,7 @@ from ....tools.winreg import write_registry_value
 
 
 class EngineSource(ABC):
-    _registry : dict[str,Type["EngineSource"]] = {}
+    _registry : ClassVar[dict[str,Type["EngineSource"]]] = {}
 
     def __init_subclass__(cls, **kwargs: dict[str, Any]) -> None:
         super().__init_subclass__(**kwargs)
@@ -54,7 +54,10 @@ class EngineSourceEGS(EngineSource):
 
     def copy_engine_to(self, destination_folder: Path) -> bool:
         raise Exception(
-            "Engine installation via Epic Games Launcher is not supported. Please open the Epic Games Launcher and install the engine version manually."
+            (
+                "Engine installation via Epic Games Launcher is not supported."
+                "Please open the Epic Games Launcher and install the engine version manually."
+            )
         )
 
     def finalize_engine_installation(self, destination_folder: Path) -> bool:
@@ -90,7 +93,7 @@ class EngineSourceLocal(EngineSourceInstalledBuild):
                 ]
 
                 if matching_files:
-                    self.source_file = sorted(matching_files, key=lambda p: p.name)[-1]
+                    self.source_file = str(sorted(matching_files, key=lambda p: p.name)[-1])
                     logger.info(f"Found local engine source at '{self.source_file}'")
                     return True
 

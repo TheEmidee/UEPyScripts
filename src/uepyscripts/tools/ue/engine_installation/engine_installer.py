@@ -113,7 +113,10 @@ class EngineInstaller:
 
         if destination_file.exists():
             logger.info(
-                f"The engine source file '{source_file_name}' already exists in the destination folder '{self.engine_destination_folder}'. Skipping copy."
+                (
+                    f"The engine source file '{source_file_name}' already exists in the destination folder '{self.engine_destination_folder}'."
+                    "Skipping copy."
+                )
             )
         else:
             if not self.engine_destination_folder.exists():

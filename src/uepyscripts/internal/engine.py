@@ -7,6 +7,7 @@ from packaging.version import Version
 from uepyscripts import logger
 from uepyscripts.internal.engine_resolver import resolve_engine_path
 from uepyscripts.internal.project import Project
+from uepyscripts.tools.subprocess import run_subprocess
 
 
 class Engine:
@@ -32,32 +33,7 @@ class Engine:
                 if args is not None:
                     all_args += args
 
-                all_args_str = " ".join(map(str, all_args))
-
-                if self.capture_output:
-                    process_str : subprocess.Popen[str] = subprocess.Popen(
-                        all_args_str,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        shell=True,
-                        text=True,  # Handle text encoding automatically
-                    )
-
-                    assert process_str.stdout is not None
-
-                    for line in iter(process_str.stdout.readline, ""):
-                        if line:
-                            logger.info(line.rstrip("\n"))
-
-                    process_str.wait()
-                    return process_str.returncode
-                else:
-                    process_bytes : subprocess.Popen[bytes] = subprocess.Popen(all_args, stdout=subprocess.PIPE)
-
-                    if not self.wait_process:
-                        return 0
-
-                    return process_bytes.wait()
+                return run_subprocess(all_args, self.capture_output)
 
             except subprocess.CalledProcessError as e:
                 logger.fatal(f"Error occured when running {self.path}. ")

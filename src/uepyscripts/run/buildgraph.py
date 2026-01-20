@@ -14,7 +14,7 @@ class BuildgraphExecutionInfos(BaseModel):
     properties : dict[str, str] = {}
     extra_arguments : list[str] = []
 
-    @field_validator('properties', pre=True)
+    @field_validator('properties', mode='before')
     @classmethod
     def parse_properties(cls, v : Any) -> dict[str, str]:  # noqa: ANN401
         if isinstance(v, str):
@@ -22,19 +22,21 @@ class BuildgraphExecutionInfos(BaseModel):
             parsed = json.loads(v)
             if not isinstance(parsed, dict):
                 raise ValueError("Properties must be a dictionary")
-            return {str(key): str(value) for key, value in parsed.items()}
-        return v
-    
-    @field_validator('extra_arguments', pre=True)
+        if isinstance(v, dict):
+            return {str(key): str(value) for key, value in v.items()}
+        raise ValueError("Properties must be a dictionary or JSON string")
+            
+    @field_validator('extra_arguments', mode='before')
     @classmethod
     def parse_extra_arguments(cls, v : Any) -> list[str]:  # noqa: ANN401
         if isinstance(v, str):
             import json
             parsed = json.loads(v)
-            if not isinstance(parsed, dict):
+            if not isinstance(parsed, list):
                 raise ValueError("Properties must be a dictionary")
-            return [str(item) for item in parsed]
-        return v
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        raise ValueError("Extra arguments must be a list or JSON string")
 
     class Config:
         populate_by_name = True
@@ -45,7 +47,7 @@ def run(execution_infos : BuildgraphExecutionInfos) -> int:
     logger.debug(f"Extra Properties : {execution_infos.properties}")
     logger.debug(f"Extra Parameters : {execution_infos.extra_arguments}")
 
-    buildgraph_path = project.root_folder.joinpath(execution_infos["Project"]["BuildgraphPath"])
+    buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
     logger.debug(f"Buildgraph XML path : {buildgraph_path}")
 
     if not buildgraph_path.exists():

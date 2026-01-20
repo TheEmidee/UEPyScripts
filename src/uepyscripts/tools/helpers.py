@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from uepyscripts import logger
+from uepyscripts.tools.subprocess import run_subprocess
 
 
 def is_engine_from_egs(engine_version: str) -> bool:
@@ -86,29 +87,16 @@ def copy_with_robocopy(source: Path, destination: Path, threads : int = 8) -> bo
     logger.info(f"Using ROBOCOPY to Copy '{filename}' from {source_dir} to {destination}...")
 
     try:
-        # Run Robocopy
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
-
-        assert process.stdout is not None
-        assert process.stderr is not None
-
-        # Print output in real-time
-        for line in process.stdout:
-            print(line, end="")
-
-        # Wait for process to complete
-        process.wait()
-
+        return_code = run_subprocess(cmd, True)
+        if return_code < 8:
         # Robocopy return codes:
         # 0 = No files copied (file already exists and is identical)
         # 1 = Files copied successfully
         # 2+ = Some files or directories could not be copied
-        if process.returncode < 8:
             logger.info("\n✓ Copy completed successfully!")
             return True
         else:
-            logger.error(f"\n✗ Copy completed with errors (exit code: {process.returncode})")
-            logger.error(process.stderr.read())
+            logger.error(f"\n✗ Copy completed with errors (exit code: {return_code})")
             return False
 
     except FileNotFoundError:
@@ -158,29 +146,14 @@ def decompress_7z(archive_path: Path, output_dir: Optional[Path] = None, threads
     ]
 
     try:
-        # Run 7z process
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
-
-        assert process.stdout is not None
-        assert process.stderr is not None
-
-        # Read and display output in real-time
-        for line in process.stdout:
-            line = line.strip()
-            if line:
-                print(line)
-
-        # Wait for process to complete
-        process.wait()
-
-        if process.returncode == 0:
+        return_code = run_subprocess(cmd, True)
+        if return_code == 0:
             logger.info(f"Successfully extracted: {archive_path}")
             logger.debug(f"Output directory: {output_dir}")
             logger.debug(f"Threads used: {threads}")
             return True
         else:
-            stderr = process.stderr.read()
-            logger.error(f"Error: {stderr}")
+            logger.error(f"Error. Return code : {return_code}")
             return False
 
     except subprocess.CalledProcessError as e:
