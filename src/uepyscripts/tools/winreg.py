@@ -19,6 +19,7 @@ def get_registry_value(hkey: int, key_path: str, value_name: str) -> Optional[Pa
 
     return None
 
+
 def write_registry_value(hkey: int, key_path: str, value_name: str, value_data: str) -> bool:
     full_path = f"{key_path}\\{value_name}"
 

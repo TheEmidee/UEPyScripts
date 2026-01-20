@@ -25,10 +25,8 @@ def resolve_engine_from_registry(project: Project) -> Optional[Path]:
 def resolve_engine_from_egs(project: Project) -> Optional[Path]:
     if is_engine_from_egs(project.engine_association):
         registry_value = get_registry_value(
-            winreg.HKEY_LOCAL_MACHINE, 
-            rf"SOFTWARE\EpicGames\Unreal Engine\{project.engine_association}", 
-            "InstalledDirectory"
-            )
+            winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\EpicGames\Unreal Engine\{project.engine_association}", "InstalledDirectory"
+        )
         if registry_value:
             path = Path(registry_value)
             if path.exists():

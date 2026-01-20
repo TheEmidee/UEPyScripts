@@ -36,7 +36,7 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def write_download_urls(uploaded_objects : list[S3UploadedObject], output_file : Path) -> None:
+def write_download_urls(uploaded_objects: list[S3UploadedObject], output_file: Path) -> None:
     """Write download URLs to output file in format 'URL : FileName'."""
     try:
         output_path = Path(output_file)

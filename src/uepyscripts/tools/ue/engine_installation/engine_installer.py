@@ -11,7 +11,7 @@ from ....tools.ue.engine_installation.engine_source import resolve_engine_source
 
 
 class Task:
-    def __init__(self, task_description: str, func : Callable[[], Optional[bool]]) -> None:
+    def __init__(self, task_description: str, func: Callable[[], Optional[bool]]) -> None:
         self.task_description = task_description
         self.func = func
 
@@ -21,7 +21,7 @@ class Task:
 
 class TaskList:
     def __init__(self) -> None:
-        self.tasks : list[Task] = []
+        self.tasks: list[Task] = []
 
     def add_task(self, task: Task) -> None:
         self.tasks.append(task)
@@ -96,7 +96,7 @@ class EngineInstaller:
             raise RuntimeError("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
 
     def get_project_platforms(self) -> List[str]:
-        platforms : str = self.config["EngineUpdate.TurnKey"]["Platforms"]
+        platforms: str = self.config["EngineUpdate.TurnKey"]["Platforms"]
         return platforms.split("+")
 
     def update_sdks(self, platforms: List[str]) -> None:

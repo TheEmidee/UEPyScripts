@@ -20,7 +20,7 @@ class Config:
             logger.debug(f"Reading file: {ini_path}")
             self.config.read(ini_path)
 
-    def __getitem__(self, key : str) -> configparser.SectionProxy:
+    def __getitem__(self, key: str) -> configparser.SectionProxy:
         return self.config[key]
 
 

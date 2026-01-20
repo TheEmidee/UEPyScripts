@@ -23,11 +23,13 @@ class ProjectFolders:
         self.saved = root_folder.joinpath("Saved")
         self.saved_folders = ProjectSavedFolders(self.saved)
 
+
 class UProjectFile(BaseModel):
     engine_association: str = Field(alias="EngineAssociation")
 
     class Config:
         populate_by_name = True
+
 
 class Project:
     def __init__(self, uproject_path: Path) -> None:

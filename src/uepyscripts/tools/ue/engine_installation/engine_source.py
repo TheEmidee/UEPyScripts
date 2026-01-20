@@ -13,7 +13,7 @@ from ....tools.winreg import write_registry_value
 
 
 class EngineSource(ABC):
-    _registry : ClassVar[dict[str,Type["EngineSource"]]] = {}
+    _registry: ClassVar[dict[str, Type["EngineSource"]]] = {}
 
     def __init_subclass__(cls, **kwargs: dict[str, Any]) -> None:
         super().__init_subclass__(**kwargs)
@@ -23,10 +23,10 @@ class EngineSource(ABC):
     def __init__(self, project: Project, config: Config) -> None:
         self.project = project
         self.config = config
-        self.source_file : str
+        self.source_file: str
 
     @classmethod
-    def get_source(cls, name : str) -> Optional[Type["EngineSource"]]:
+    def get_source(cls, name: str) -> Optional[Type["EngineSource"]]:
         return cls._registry.get(name)
 
     @abstractmethod
@@ -111,7 +111,7 @@ class EngineSourceLocal(EngineSourceInstalledBuild):
 
 
 class EngineSourceAWS(EngineSourceInstalledBuild):
-    def __init__(self, project : Project, config : Config) -> None:
+    def __init__(self, project: Project, config: Config) -> None:
         super().__init__(project, config)
         self.s3_client = S3Client(
             access_key=self.config["EngineUpdate.Source.AWS"]["AWS_AccessKey"],

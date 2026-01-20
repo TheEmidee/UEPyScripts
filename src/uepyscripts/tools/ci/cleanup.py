@@ -8,7 +8,7 @@ from ... import logger
 from ...context import config
 
 
-def parse_arguments(argv : Optional[Sequence[str]] = None) -> argparse.Namespace:
+def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task using a shared storage.")
     parser.add_argument("--build_tag", type=str, help="The tag that will be used to define a folder on a shared storage")

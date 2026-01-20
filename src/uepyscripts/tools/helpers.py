@@ -40,7 +40,7 @@ def get_engine_root_folder_from_env_var(project_engine_association: str) -> Opti
     return None
 
 
-def copy_with_robocopy(source: Path, destination: Path, threads : int = 8) -> bool:
+def copy_with_robocopy(source: Path, destination: Path, threads: int = 8) -> bool:
     """
     Copy a file using Robocopy with multithreading for maximum speed.
 
@@ -70,7 +70,7 @@ def copy_with_robocopy(source: Path, destination: Path, threads : int = 8) -> bo
     # Create destination directory if it doesn't exist
     os.makedirs(destination, exist_ok=True)
 
-    cmd : list[str] = [
+    cmd: list[str] = [
         "robocopy",
         source_dir,  # Source directory
         str(destination),  # Destination directory
@@ -89,10 +89,10 @@ def copy_with_robocopy(source: Path, destination: Path, threads : int = 8) -> bo
     try:
         return_code = run_subprocess(cmd, True)
         if return_code < 8:
-        # Robocopy return codes:
-        # 0 = No files copied (file already exists and is identical)
-        # 1 = Files copied successfully
-        # 2+ = Some files or directories could not be copied
+            # Robocopy return codes:
+            # 0 = No files copied (file already exists and is identical)
+            # 1 = Files copied successfully
+            # 2+ = Some files or directories could not be copied
             logger.info("\n✓ Copy completed successfully!")
             return True
         else:
@@ -136,7 +136,7 @@ def decompress_7z(archive_path: Path, output_dir: Optional[Path] = None, threads
         threads = os.cpu_count() or -11
 
     # Build command
-    cmd : list[str] = [
+    cmd: list[str] = [
         seven_zip,
         "x",  # Extract with full paths
         str(archive_path),

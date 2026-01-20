@@ -10,27 +10,29 @@ from ..context import config, engine, project
 
 
 class BuildgraphExecutionInfos(BaseModel):
-    target : str = ""
-    properties : dict[str, str] = {}
-    extra_arguments : list[str] = []
+    target: str = ""
+    properties: dict[str, str] = {}
+    extra_arguments: list[str] = []
 
-    @field_validator('properties', mode='before')
+    @field_validator("properties", mode="before")
     @classmethod
-    def parse_properties(cls, v : Any) -> dict[str, str]:  # noqa: ANN401
+    def parse_properties(cls, v: Any) -> dict[str, str]:  # noqa: ANN401
         if isinstance(v, str):
             import json
+
             parsed = json.loads(v)
             if not isinstance(parsed, dict):
                 raise ValueError("Properties must be a dictionary")
         if isinstance(v, dict):
             return {str(key): str(value) for key, value in v.items()}
         raise ValueError("Properties must be a dictionary or JSON string")
-            
-    @field_validator('extra_arguments', mode='before')
+
+    @field_validator("extra_arguments", mode="before")
     @classmethod
-    def parse_extra_arguments(cls, v : Any) -> list[str]:  # noqa: ANN401
+    def parse_extra_arguments(cls, v: Any) -> list[str]:  # noqa: ANN401
         if isinstance(v, str):
             import json
+
             parsed = json.loads(v)
             if not isinstance(parsed, list):
                 raise ValueError("Properties must be a dictionary")
@@ -42,7 +44,7 @@ class BuildgraphExecutionInfos(BaseModel):
         populate_by_name = True
 
 
-def run(execution_infos : BuildgraphExecutionInfos) -> int:
+def run(execution_infos: BuildgraphExecutionInfos) -> int:
     logger.info(f"Run Buildgraph - Target : {execution_infos.target}")
     logger.debug(f"Extra Properties : {execution_infos.properties}")
     logger.debug(f"Extra Parameters : {execution_infos.extra_arguments}")
@@ -122,14 +124,13 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--string_arguments",
         type=str,
         default="",
-        help="Space separated lists of arguments to pass as extra_arguments "
-        'Ex: \'"item1" "item2" "item3"\'',
+        help='Space separated lists of arguments to pass as extra_arguments Ex: \'"item1" "item2" "item3"\'',
     )
     parser.add_argument("--config_file", type=str, default="", help="Path to a JSON file containing the target, properties, and extra arguments")
     return parser.parse_args(argv)
 
 
-def validate_config(execution_infos : BuildgraphExecutionInfos) -> None:
+def validate_config(execution_infos: BuildgraphExecutionInfos) -> None:
     """Validate the configuration values."""
     pattern = r'-SingleNode="[^"]*"'
 
@@ -140,7 +141,7 @@ def validate_config(execution_infos : BuildgraphExecutionInfos) -> None:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_arguments(argv)
 
-    execution_infos : BuildgraphExecutionInfos
+    execution_infos: BuildgraphExecutionInfos
 
     if args.config_file:
         config_file_path = Path(args.config_file)

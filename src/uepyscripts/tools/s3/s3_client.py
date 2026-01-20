@@ -12,17 +12,17 @@ from tqdm import tqdm
 
 @dataclass
 class S3UploadedObject:
-    file_path : Path
-    s3_key : str
-    download_url : str
-    file_size : int
+    file_path: Path
+    s3_key: str
+    download_url: str
+    file_size: int
 
 
 class S3Client:
     def __init__(self, access_key: str, secret_key: str, region: str) -> None:
         self.s3 = boto3.client("s3", aws_access_key_id=access_key, aws_secret_access_key=secret_key, region_name=region)
 
-    def get_bucket_files(self, bucket_name: str, prefix: str, filter_func: Optional[Callable[[dict[str, Any]], bool]] = None ) -> List[str]:
+    def get_bucket_files(self, bucket_name: str, prefix: str, filter_func: Optional[Callable[[dict[str, Any]], bool]] = None) -> List[str]:
         """
         Retrieve a list of files from an S3 bucket with optional filtering.
         Args:
@@ -113,8 +113,8 @@ class S3Client:
         # Collect all files first to show overall progress
         @dataclass
         class FileInfo:
-            file_path : Path
-            file_size : int
+            file_path: Path
+            file_size: int
 
         all_files = []
         total_size = 0
@@ -132,8 +132,8 @@ class S3Client:
         print(f"Found {len(all_files)} files ({total_size / (1024 * 1024):.1f} MB) to upload")
 
         # Create progress bars
-        overall_pbar : tqdm
-        file_pbar : tqdm
+        overall_pbar: tqdm
+        file_pbar: tqdm
 
         if show_progress:
             try:
@@ -152,24 +152,20 @@ class S3Client:
                 if show_progress:
                     # Create individual file progress bar
                     file_pbar = tqdm(
-                        total=file_info.file_size, 
-                        unit="B", 
-                        unit_scale=True, 
-                        desc=f"Uploading {file_info.file_path.name}", 
-                        position=1, 
-                        leave=False)
+                        total=file_info.file_size, unit="B", unit_scale=True, desc=f"Uploading {file_info.file_path.name}", position=1, leave=False
+                    )
 
                     class ProgressCallback:
                         """Callback class for tracking upload progress."""
 
-                        def __init__(self, filename : str, file_size : int, pbar : tqdm) -> None:
+                        def __init__(self, filename: str, file_size: int, pbar: tqdm) -> None:
                             self.filename = filename
                             self.file_size = file_size
                             self.pbar = pbar
                             self.bytes_transferred = 0
                             self._lock = threading.Lock()
 
-                        def __call__(self, bytes_amount : int) -> None:
+                        def __call__(self, bytes_amount: int) -> None:
                             with self._lock:
                                 self.bytes_transferred += bytes_amount
                                 if self.pbar:
@@ -205,7 +201,7 @@ class S3Client:
         print(f"Successfully uploaded {uploaded_files} files to s3://{bucket_name}/{destination_folder}/")
         return uploaded_files > 0, uploaded_objects
 
-    def generate_download_url(self, bucket_name : str, s3_key : str, region : str="") -> str:
+    def generate_download_url(self, bucket_name: str, s3_key: str, region: str = "") -> str:
         """Generate a direct download URL for an S3 object."""
         if region != "us-east-1":
             base_url = f"https://{bucket_name}.s3.{region}.amazonaws.com"
