@@ -3,13 +3,18 @@ import re
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .. import logger
 from ..context import config, engine, project
 
 
 class BuildgraphExecutionInfos(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        validate_assignment=True
+        )
+
     target: str = ""
     properties: dict[str, str] = {}
     extra_arguments: list[str] = []
@@ -39,9 +44,6 @@ class BuildgraphExecutionInfos(BaseModel):
         if isinstance(v, list):
             return [str(item) for item in v]
         raise ValueError("Extra arguments must be a list or JSON string")
-
-    class Config:
-        populate_by_name = True
 
 
 def run(execution_infos: BuildgraphExecutionInfos) -> int:
@@ -99,7 +101,7 @@ def run(execution_infos: BuildgraphExecutionInfos) -> int:
     if execution_infos.extra_arguments is not None:
         for arg in execution_infos.extra_arguments:
             arguments.append(arg)
-
+            
     return engine.uat(arguments)
 
 
