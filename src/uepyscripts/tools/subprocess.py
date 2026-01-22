@@ -10,7 +10,7 @@ def run_subprocess(cmd: list[str], log_output: bool = True) -> int:
 
         assert process.stdout is not None
         assert process.stderr is not None
-        
+
         for line in process.stdout:
             line = line.strip()
             if line:

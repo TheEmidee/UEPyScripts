@@ -7,7 +7,7 @@ from .. import logger
 from ..context import config, engine, project
 
 
-def run(target : str, arguments : list[str]) -> int:
+def run(target: str, arguments: list[str]) -> int:
     logger.info(f"Run Buildgraph - Target : {target}")
     logger.debug(f"Arguments : {arguments}")
 
@@ -51,10 +51,10 @@ def run(target : str, arguments : list[str]) -> int:
     if shared_properties is not None:
         for key, value in shared_properties.items():
             uat_arguments.append(f"-set:{key}={value}")
-    
+
     for arg in arguments:
         uat_arguments.append(arg)
-            
+
     return engine.uat(uat_arguments)
 
 
@@ -66,7 +66,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     return parser.parse_known_args(argv)
 
 
-def validate_config(target : str, arguments : list[str]) -> None:
+def validate_config(target: str, arguments: list[str]) -> None:
     """Validate the configuration values."""
     pattern = r'-SingleNode="[^"]*"'
 

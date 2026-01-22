@@ -2,6 +2,7 @@ import psutil
 
 PROCNAME = "UnrealEditor.exe"
 
+
 def main() -> None:
     print("Closing Unreal Editor...")
 
