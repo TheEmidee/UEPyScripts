@@ -1,5 +1,5 @@
 # Get the directory where this script is located
-$scriptDir = $PSScriptRoot
+$scriptDir = (Get-Item -Path $PSScriptRoot ).parent
 
 # Walk up the hierarchy to find the project root (directory containing .uproject file)
 $projectRoot = $null
@@ -29,18 +29,14 @@ $outputFile = Join-Path -Path $projectRoot -ChildPath "Setup.ps1"
 
 # Calculate the PyScripts folder location relative to project root
 $pyScriptsFolder = $scriptDir | Resolve-Path -Relative -RelativeBasePath $projectRoot
-# Remove leading .\ if present and normalize to forward slashes
 $pyScriptsFolder = $pyScriptsFolder -replace '^\\.\\', '' -replace '\\', '/'
-
-# Calculate relative paths from project root to the required scripts
-$setupVenvPath = Split-Path -Parent $pyScriptsFolder
-$setupVenvPath = "$setupVenvPath/setup_venv.ps1" -replace '\\', '/'
+$aliasesFolder = ( Join-Path -Path $pyScriptsFolder -ChildPath ".venv/Scripts/" ) -replace '^\\.\\', '' -replace '\\', '/'
 
 $setupContent = @"
 try {
-    .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/InstallPython.ps1" )
-    .( Join-Path -Path `$PSScriptRoot -ChildPath "$setupVenvPath" )
-    .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.check_engine_installation"
+    $pyScriptsFolder/Tools/InstallPython.ps1
+    $pyScriptsFolder/setup_venv.ps1
+    $aliasesFolder/ue-check-engine-installation.exe
 }
 catch {
     Write-Error `$_.Exception.Message
@@ -93,9 +89,9 @@ if ($executeConfirmation -eq 'Y' -or $executeConfirmation -eq 'y') {
     $compileAndRunEditorPath = Join-Path -Path $projectRoot -ChildPath "CompileAndRunEditor.ps1"
     $compileAndRunEditorContent = @"
 try {
-    .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.close_editor"
-    .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.compile_editor"
-    .( Join-Path -Path `$PSScriptRoot -ChildPath "$pyScriptsFolder/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.run_editor"
+    $aliasesFolder/ue-close-editor.exe
+    $aliasesFolder/ue-compile-editor.exe
+    $aliasesFolder/ue-run-editor.exe
 }
 catch {
     Write-Error `$_.Exception.Message
