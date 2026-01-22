@@ -10,7 +10,7 @@ from ...context import config, project
 from ...run import buildgraph
 
 
-def update_or_add_argument(args_list: List[str], arg_name: str, new_values: List[str]) -> List[str]:
+def update_or_add_argument(existing_args: list[str], defaults: list[str]) -> List[str]:
     """Update an argument's value(s) if it exists, or add it if it doesn't.
 
     Args:
@@ -18,42 +18,41 @@ def update_or_add_argument(args_list: List[str], arg_name: str, new_values: List
         arg_name: The argument name (e.g., "--output-dir")
         new_value: Single value (str) or list of values
     """
-    updated_args = []
-    i = 0
-    found = False
+    """
+    Combines existing arguments with defaults. 
+    If a default argument's key is already present in existing_args, 
+    the existing one is preserved.
+    """
+    def get_arg_key(arg: str) -> str:
+        # Special case for Unreal -set:Key=Value pairs
+        # The 'key' here is actually "-set:VariableName"
+        if arg.startswith("-set:"):
+            return arg.split('=', 1)[0]
+        
+        # Standard flags or Key=Value pairs
+        # Splits on '=' or ':' and takes the first part (e.g., -NoP4 or -SharedStorageDir)
+        return arg.split('=', 1)[0].split(':', 1)[0]
 
-    while i < len(args_list):
-        if args_list[i] == arg_name:
-            updated_args.append(args_list[i])
-            updated_args.append(" ".join([args_list[i + 1], *new_values]))
-            i += 2
-            found = True
-        elif args_list[i].startswith(f"{arg_name}="):
-            # Handle --arg=value format (only works with single value)
-            if len(new_values) == 1:
-                updated_args.append(f"{arg_name}={new_values[0]}")
-            else:
-                # Convert to separate format for multiple values
-                updated_args.append(arg_name)
-                updated_args.extend(new_values)
-            i += 1
-            found = True
-        else:
-            updated_args.append(args_list[i])
-            i += 1
+    # Map the keys already present in the command line
+    existing_keys = {get_arg_key(arg) for arg in existing_args}
+    
+    # Start with all the arguments the user actually typed
+    final_args = list(existing_args)
 
-    if not found:
-        updated_args.append(arg_name)
-        updated_args.extend(new_values)
+    for default_arg in defaults:
+        # Only add the default if the key isn't already there
+        if get_arg_key(default_arg) not in existing_keys:
+            final_args.append(default_arg)
 
-    return updated_args
+    return final_args
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task using a shared storage.")
-    parser.add_argument("--target", type=str, help="The target to run in the buildgraph file")
+    parser.add_argument("target", type=str, help="The target to run in the buildgraph file")
     parser.add_argument("--build_tag", type=str, help="The tag that will be used to define a folder on a shared storage")
+    parser.add_argument("remainder", nargs="*", help="Properties (-set:K:V) and extra arguments")
 
     args, unknown_args = parser.parse_known_args(argv)
     return args, unknown_args
@@ -120,14 +119,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try_delete_local_buildgraph_folder(args.build_tag)
     cleanup_local_folder()
 
-    # Because it's a mess to correctly pass the properties as a JSON string from the jenkinsfile through a power shell script,
-    # all the properties for the buildgraph task are passed as a single string argument like "-set:XXX=YYY -set:ZZZ=WWW"
-    # What we do here is just pass every argument in this string_argument parameter
     updated_args = update_or_add_argument(
         unknown_args,
-        "--string_arguments",
         ["-BuildMachine", f'-SharedStorageDir="{shared_storage_dir}"', "-WriteToSharedStorage", f'-SingleNode="{args.target}"', "-NoP4"],
     )
+
+    # Pass an empty target since it's already specified in the -SingleNode argument
+    updated_args.insert(0, "")
 
     return buildgraph.main(updated_args)
 
