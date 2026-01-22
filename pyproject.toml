@@ -24,10 +24,11 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "annotated-types==0.7.0",
+  "annotated-types",
   "boto3>=1.42.0",
   "botocore",
-  "colorama==0.4.6",
+  "colorama",
+  "types-colorama",
   "jmespath==1.0.1",
   "MarkupSafe==3.0.2",
   "packaging==24.2",
@@ -44,7 +45,9 @@ dependencies = [
   "types-tqdm==4.67.0.20250809",
   "typing-inspection==0.4.1",
   "typing_extensions==4.14.0",
-  "urllib3"
+  "urllib3",
+  "invoke",
+  "types-invoke",
 ]
 
 urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
@@ -54,15 +57,16 @@ urls.Tracker = "https://github.com/TheEmidee/UEPyScripts/issues"
 
 [project.optional-dependencies]
 lint = [ 
-  "ruff>=0.1.0",
-  "mypy>=1.10.0"
+  "ruff",
+  "mypy"
 ]
 
 dist = [
-  "hatchling>=1.26",
-  "build==1.4.0",
-  "wheel==0.45.1",
-  "twine==6.2.0",
+  "hatchling",
+  "build",
+  "wheel",
+  "twine",
+  "towncrier"
 ]
 
 dev = ["UEPyScripts[lint, dist]"]
@@ -123,3 +127,31 @@ exclude = [
 
 [project.scripts]
 run-buildgraph = "uepyscripts.run.buildgraph:main"
+
+[tool.towncrier]
+package = "JenkinsfileGenerator"
+package_dir = "src"
+filename = "CHANGELOG.md"
+directory = ".changelog"
+underlines = ["", "", ""]
+title_format = "## [{version}] - {project_date}"
+issue_format = "[#{issue}](https://github.com/TheEmidee/JenkinsFileGenerator/issues/{issue})"
+all_bullets = true
+
+[[tool.towncrier.type]]
+name = "Security"
+
+[[tool.towncrier.type]]
+name = "Removed"
+
+[[tool.towncrier.type]]
+name = "Deprecated"
+
+[[tool.towncrier.type]]
+name = "Added"
+
+[[tool.towncrier.type]]
+name = "Changed"
+
+[[tool.towncrier.type]]
+name = "Fixed"
