@@ -30,7 +30,7 @@ $outputFile = Join-Path -Path $projectRoot -ChildPath "Setup.ps1"
 # Calculate the PyScripts folder location relative to project root
 $pyScriptsFolder = $scriptDir | Resolve-Path -Relative -RelativeBasePath $projectRoot
 $pyScriptsFolder = $pyScriptsFolder -replace '^\\.\\', '' -replace '\\', '/'
-$aliasesFolder = ( Join-Path -Path $pyScriptsFolder -ChildPath ".venv/Scripts/" ) -replace '^\\.\\', '' -replace '\\', '/'
+$aliasesFolder = ( Join-Path -Path $pyScriptsFolder -ChildPath ".venv/Scripts" ) -replace '^\\.\\', '' -replace '\\', '/'
 
 $setupContent = @"
 try {
