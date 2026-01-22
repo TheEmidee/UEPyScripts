@@ -1,51 +1,15 @@
 import argparse
 import re
 from pathlib import Path
-from typing import Any, Optional, Sequence
-
-from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Optional, Sequence
 
 from .. import logger
 from ..context import config, engine, project
 
 
-class BuildgraphExecutionInfos(BaseModel):
-    model_config = ConfigDict(
-        populate_by_name=True,
-        validate_assignment=True
-        )
-
-    target: str = ""
-    properties: dict[str, str] = {}
-    extra_arguments: list[str] = []
-
-    @field_validator("properties", mode="before")
-    @classmethod
-    def parse_properties(cls, v: Any) -> dict[str, str]:  # noqa: ANN401
-        if isinstance(v, str):
-            import json
-            v = json.loads(v)
-            
-        if isinstance(v, dict):
-            return {str(key): str(value) for key, value in v.items()}
-        raise ValueError("Properties must be a dictionary or JSON string")
-
-    @field_validator("extra_arguments", mode="before")
-    @classmethod
-    def parse_extra_arguments(cls, v: Any) -> list[str]:  # noqa: ANN401
-        if isinstance(v, str):
-            import json
-            v = json.loads(v)
-
-        if isinstance(v, list):
-            return [str(item) for item in v]
-        raise ValueError("Extra arguments must be a list or JSON string")
-
-
-def run(execution_infos: BuildgraphExecutionInfos) -> int:
-    logger.info(f"Run Buildgraph - Target : {execution_infos.target}")
-    logger.debug(f"Extra Properties : {execution_infos.properties}")
-    logger.debug(f"Extra Parameters : {execution_infos.extra_arguments}")
+def run(target : str, arguments : list[str]) -> int:
+    logger.info(f"Run Buildgraph - Target : {target}")
+    logger.debug(f"Arguments : {arguments}")
 
     buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
     logger.debug(f"Buildgraph XML path : {buildgraph_path}")
@@ -57,14 +21,14 @@ def run(execution_infos: BuildgraphExecutionInfos) -> int:
     if extension != ".xml":
         raise Exception(f"The buildgraph file must be a XML file. Current path : {buildgraph_path}")
 
-    arguments = ["BuildGraph"]
-    arguments.append(f'-script="{buildgraph_path}"')
+    uat_arguments = ["BuildGraph"]
+    uat_arguments.append(f'-script="{buildgraph_path}"')
 
     # We can execute buildgraph without a target if the SingleNode argument is set
-    if execution_infos.target:
-        arguments.append(f'-target="{execution_infos.target}"')
+    if target != "":
+        uat_arguments.append(f'-target="{target}"')
 
-    arguments.append(f'-Project="{project.uproject_path}"')
+    uat_arguments.append(f'-Project="{project.uproject_path}"')
 
     automation_scripts_directories = config["Project"]["AutomationScriptsDirectories"]
     if automation_scripts_directories == "" or automation_scripts_directories is None:
@@ -80,104 +44,52 @@ def run(execution_infos: BuildgraphExecutionInfos) -> int:
                 continue
 
             logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
-            arguments.append(f"-ScriptDir={automation_scripts_path}")
+            uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
 
     shared_properties = dict(pair.split("=") for pair in config["Project"]["BuildgraphSharedProperties"].split("+"))
 
     if shared_properties is not None:
         for key, value in shared_properties.items():
-            arguments.append(f"-set:{key}={value}")
-
-    if execution_infos.properties is not None:
-        for key, value in execution_infos.properties.items():
-            if " " in value:
-                value = f'"{value}"'
-            arguments.append(f"-set:{key}={value}")
-
-    if execution_infos.extra_arguments is not None:
-        for arg in execution_infos.extra_arguments:
-            arguments.append(arg)
+            uat_arguments.append(f"-set:{key}={value}")
+    
+    for arg in arguments:
+        uat_arguments.append(arg)
             
-    return engine.uat(arguments)
+    return engine.uat(uat_arguments)
 
 
-def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task based on a target and properties.")
-    parser.add_argument("--target", type=str, default="", help="The target to run in the buildgraph file")
-    parser.add_argument(
-        "--properties",
-        type=str,
-        default=None,
-        nargs="?",
-        help='JSON string representing a dictionary with the properties to pass to buildgraph. Ex: \'{"key1": "value1", "key2": "value2"}\'',
-    )
-    parser.add_argument(
-        "--extra_arguments",
-        type=str,
-        default="",
-        help='JSON string representing an array of extra arguments to pass to buildgraph. Ex: \'["item1", "item2", "item3"]\'',
-    )
-    parser.add_argument(
-        "--string_arguments",
-        type=str,
-        default="",
-        help='Space separated lists of arguments to pass as extra_arguments Ex: \'"item1" "item2" "item3"\'',
-    )
-    parser.add_argument("--config_file", type=str, default="", help="Path to a JSON file containing the target, properties, and extra arguments")
-    return parser.parse_args(argv)
+    parser.add_argument("target", type=str, default="", help="The target to run in the buildgraph file")
+    parser.add_argument("remainder", nargs="*", help="Properties (-set:K:V) and extra arguments")
+    return parser.parse_known_args(argv)
 
 
-def validate_config(execution_infos: BuildgraphExecutionInfos) -> None:
+def validate_config(target : str, arguments : list[str]) -> None:
     """Validate the configuration values."""
     pattern = r'-SingleNode="[^"]*"'
 
-    if not execution_infos.target and not any(re.search(pattern, item) for item in execution_infos.extra_arguments):
+    if not target and not any(re.search(pattern, item) for item in arguments):
         raise ValueError("Target is required")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = parse_arguments(argv)
+    args, other_arguments = parse_arguments(argv)
 
-    execution_infos = BuildgraphExecutionInfos()
-
-    if args.config_file:
-        config_file_path = Path(args.config_file)
-        if config_file_path.exists():
-            with open(config_file_path, "r", encoding="utf-8") as f:
-                json_str = f.read()
-                execution_infos = BuildgraphExecutionInfos.model_validate_json(json_str)
-        else:
-            logger.warning(f"Config file not found at {config_file_path}")
+    target = ""
 
     if args.target:
-        execution_infos.target = args.target
-
-    if args.properties:
-        logger.debug(f"Properties from command line: {args.properties}")
-        execution_infos.properties = args.properties
-
-    if args.extra_arguments:
-        logger.debug(f"Extra Arguments from command line: {args.extra_arguments}")
-        execution_infos.extra_arguments = args.extra_arguments
-
-    def split_string_arguments(string_arguments: str) -> list[str]:
-        pattern = r'[^\s"]+="[^"]*"|[^\s"]+'
-        return re.findall(pattern, string_arguments)
-
-    # Split string arguments into a list. The regex captures quoted strings and unquoted words.
-    # This allows for arguments like --arg="value with spaces" to be handled correctly
-    string_arguments = split_string_arguments(args.string_arguments)
-    execution_infos.extra_arguments += string_arguments
+        target = args.target
 
     try:
-        validate_config(execution_infos)
+        validate_config(target, other_arguments)
     except (ValueError, TypeError) as e:
         logger.error(f"Configuration validation failed: {e}")
         raise e
 
     try:
-        return run(execution_infos)
+        return run(target, other_arguments)
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         raise e
