@@ -24,10 +24,8 @@ class BuildgraphExecutionInfos(BaseModel):
     def parse_properties(cls, v: Any) -> dict[str, str]:  # noqa: ANN401
         if isinstance(v, str):
             import json
-
-            parsed = json.loads(v)
-            if not isinstance(parsed, dict):
-                raise ValueError("Properties must be a dictionary")
+            v = json.loads(v)
+            
         if isinstance(v, dict):
             return {str(key): str(value) for key, value in v.items()}
         raise ValueError("Properties must be a dictionary or JSON string")
@@ -37,10 +35,8 @@ class BuildgraphExecutionInfos(BaseModel):
     def parse_extra_arguments(cls, v: Any) -> list[str]:  # noqa: ANN401
         if isinstance(v, str):
             import json
+            v = json.loads(v)
 
-            parsed = json.loads(v)
-            if not isinstance(parsed, list):
-                raise ValueError("Properties must be a dictionary")
         if isinstance(v, list):
             return [str(item) for item in v]
         raise ValueError("Extra arguments must be a list or JSON string")
@@ -143,7 +139,7 @@ def validate_config(execution_infos: BuildgraphExecutionInfos) -> None:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_arguments(argv)
 
-    execution_infos: BuildgraphExecutionInfos
+    execution_infos = BuildgraphExecutionInfos()
 
     if args.config_file:
         config_file_path = Path(args.config_file)
