@@ -1,3 +1,6 @@
 from uepyscripts.context import engine
 
-engine.run_editor()
+
+def main() -> None:
+    print("Starting Unreal Editor...")
+    engine.run_editor()

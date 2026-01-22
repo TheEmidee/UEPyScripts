@@ -126,7 +126,11 @@ exclude = [
 ]
 
 [project.scripts]
-run-buildgraph = "uepyscripts.run.buildgraph:main"
+ue-run-buildgraph = "uepyscripts.run.buildgraph:main"
+ue-close-editor = "uepyscripts.tools.ue.close_editor:main"
+ue-compile-editor = "uepyscripts.tools.ue.compile_editor:main"
+ue-run-editor = "uepyscripts.tools.ue.run_editor:main"
+ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
 
 [tool.towncrier]
 package = "JenkinsfileGenerator"
