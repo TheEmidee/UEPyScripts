@@ -47,7 +47,6 @@ def main() -> None:
         logger.info(
             f"Engine '{engine.version}' for project '{project.project_name}' is already installed at '{engine.root_path}'. No action is required."
         )
-        raise Exception("")
     except Exception as e:
         logger.error(f"Engine resolution failed: {e}")
 
