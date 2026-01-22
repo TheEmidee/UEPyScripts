@@ -109,10 +109,12 @@ catch {
 
 $executeConfirmation = Read-Host "`nDo you want to create a script example about how to run a buildgraph task? (Y/N)"
 if ($executeConfirmation -eq 'Y' -or $executeConfirmation -eq 'y') {
-    $buildGraphScriptPath = Join-Path -Path $projectRoot -ChildPath "Scripts/Project/BuildgraphTask.ps1"
-    $buildGraphScriptDir = Split-Path -Path $buildGraphScriptPath -Parent
+    $buildGraphScriptDirPath = Join-Path -Path $projectRoot -ChildPath "Scripts/Project"
+    $buildGraphScriptPath = Join-Path -Path $buildGraphScriptDirPath -ChildPath "BuildgraphTask.ps1"
 
-    $pyScriptsFolder = [System.IO.Path]::GetRelativePath($buildGraphScriptDir, $scriptDir)
+    New-Item -ItemType Directory -Force -Path $buildGraphScriptDirPath
+
+    $pyScriptsFolder = [System.IO.Path]::GetRelativePath($buildGraphScriptDirPath, $scriptDir)
     $pyScriptsFolder = $pyScriptsFolder -replace '^\\.\\', '' -replace '\\', '/'
 
     $buildgraphSampleContent = @"
