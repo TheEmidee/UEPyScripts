@@ -133,6 +133,8 @@ ue-run-editor = "uepyscripts.tools.ue.run_editor:main"
 ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
 ue-ci-cleanup = "uepyscripts.tools.ci.cleanup:main"
 ue-ci-run-buildgraph = "uepyscripts.tools.ci.buildgraph:main"
+ue-tools-archives-rotate = "uepyscripts.tools.archives.rotate_archives:main"
+ue-tools-archives-upload = "uepyscripts.tools.archives.upload_archives:main"
 
 [tool.towncrier]
 package = "JenkinsfileGenerator"
