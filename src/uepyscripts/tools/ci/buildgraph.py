@@ -23,19 +23,20 @@ def update_or_add_argument(existing_args: list[str], defaults: list[str]) -> Lis
     If a default argument's key is already present in existing_args, 
     the existing one is preserved.
     """
+
     def get_arg_key(arg: str) -> str:
         # Special case for Unreal -set:Key=Value pairs
         # The 'key' here is actually "-set:VariableName"
         if arg.startswith("-set:"):
-            return arg.split('=', 1)[0]
-        
+            return arg.split("=", 1)[0]
+
         # Standard flags or Key=Value pairs
         # Splits on '=' or ':' and takes the first part (e.g., -NoP4 or -SharedStorageDir)
-        return arg.split('=', 1)[0].split(':', 1)[0]
+        return arg.split("=", 1)[0].split(":", 1)[0]
 
     # Map the keys already present in the command line
     existing_keys = {get_arg_key(arg) for arg in existing_args}
-    
+
     # Start with all the arguments the user actually typed
     final_args = list(existing_args)
 
@@ -52,7 +53,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     parser = argparse.ArgumentParser(description="Execute a buildgraph task using a shared storage.")
     parser.add_argument("--target", type=str, help="The target to run in the buildgraph file")
     parser.add_argument("--build_tag", type=str, help="The tag that will be used to define a folder on a shared storage")
-    #parser.add_argument("remainder", nargs=argparse.REMAINDER, help="Properties (-set:K:V) and extra arguments")
+    # parser.add_argument("remainder", nargs=argparse.REMAINDER, help="Properties (-set:K:V) and extra arguments")
 
     args, unknown_args = parser.parse_known_args(argv)
     return args, unknown_args
@@ -123,7 +124,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     updated_args = update_or_add_argument(
         unknown_args,
-        ["-BuildMachine", f'-SharedStorageDir={shared_storage_dir}', "-WriteToSharedStorage", f'-SingleNode={args.target}', "-NoP4"],
+        ["-BuildMachine", f"-SharedStorageDir={shared_storage_dir}", "-WriteToSharedStorage", f"-SingleNode={args.target}", "-NoP4"],
     )
 
     return buildgraph.main(updated_args)

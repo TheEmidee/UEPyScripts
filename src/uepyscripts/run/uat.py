@@ -2,11 +2,17 @@ import argparse
 
 from uepyscripts.context import engine
 
-parser = argparse.ArgumentParser(description="Execute different tasks based on command-line arguments.")
-parser.add_argument("arguments", nargs="*", help="Extra arguments to pass to UBT")
 
-args: argparse.Namespace = parser.parse_args()
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Execute different tasks based on command-line arguments.")
+    parser.add_argument("arguments", nargs="*", help="Extra arguments to pass to UBT")
 
-arguments: list[str] = args.arguments
+    args: argparse.Namespace = parser.parse_args()
 
-engine.uat(args.arguments)
+    arguments: list[str] = args.arguments
+
+    return engine.uat(arguments)
+
+
+if __name__ == "__main__":
+    main()

@@ -126,10 +126,13 @@ exclude = [
 ]
 
 [project.scripts]
+ue-run-uat = "uepyscripts.run.uat:main"
+ue-run-ubt = "uepyscripts.run.ubt:main"
 ue-run-buildgraph = "uepyscripts.run.buildgraph:main"
+ue-run-editor = "uepyscripts.tools.ue.run_editor:main"
+ue-generate-solution = "uepyscripts.tools.ue.generate_solution:main"
 ue-close-editor = "uepyscripts.tools.ue.close_editor:main"
 ue-compile-editor = "uepyscripts.tools.ue.compile_editor:main"
-ue-run-editor = "uepyscripts.tools.ue.run_editor:main"
 ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
 ue-ci-cleanup = "uepyscripts.tools.ci.cleanup:main"
 ue-ci-run-buildgraph = "uepyscripts.tools.ci.buildgraph:main"

@@ -22,13 +22,13 @@ def run(target: str, arguments: list[str]) -> int:
         raise Exception(f"The buildgraph file must be a XML file. Current path : {buildgraph_path}")
 
     uat_arguments = ["BuildGraph"]
-    uat_arguments.append(f'-script={buildgraph_path}')
+    uat_arguments.append(f"-script={buildgraph_path}")
 
     # We can execute buildgraph without a target if the SingleNode argument is set
     if target != "":
-        uat_arguments.append(f'-target={target}')
+        uat_arguments.append(f"-target={target}")
 
-    uat_arguments.append(f'-Project={project.uproject_path}')
+    uat_arguments.append(f"-Project={project.uproject_path}")
 
     automation_scripts_directories = config["Project"]["AutomationScriptsDirectories"]
     if automation_scripts_directories == "" or automation_scripts_directories is None:
