@@ -17,7 +17,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 
 def delete_buildgraph_shared_storage_directory(build_tag: str) -> None:
-    shared_storage_dir = Path(f"{config['Jenkins']['BuildgraphSharedStoragePath']}\{build_tag}")
+    shared_storage_dir = Path(f"{config['Jenkins']['BuildgraphSharedStoragePath']}\\{build_tag}")
 
     logger.info(f"Delete Buildgraph Shared Storage directory: {shared_storage_dir}")
     shutil.rmtree(shared_storage_dir, ignore_errors=True)
