@@ -52,7 +52,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     parser = argparse.ArgumentParser(description="Execute a buildgraph task using a shared storage.")
     parser.add_argument("target", type=str, help="The target to run in the buildgraph file")
     parser.add_argument("--build_tag", type=str, help="The tag that will be used to define a folder on a shared storage")
-    parser.add_argument("remainder", nargs="*", help="Properties (-set:K:V) and extra arguments")
+    #parser.add_argument("remainder", nargs=argparse.REMAINDER, help="Properties (-set:K:V) and extra arguments")
 
     args, unknown_args = parser.parse_known_args(argv)
     return args, unknown_args
@@ -110,10 +110,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not args.build_tag:
         raise ValueError("Build tag is required")
 
-    logger.debug(f"Running ci.buildgraph with build tag: {args.build_tag} on machine {socket.gethostname()}")
+    logger.info(f"Running ci.buildgraph with build tag: {args.build_tag} on machine {socket.gethostname()}")
 
     shared_storage_dir = Path(config["Jenkins"]["BuildgraphSharedStoragePath"]) / args.build_tag
-    logger.debug(f"Shared storage directory: {shared_storage_dir}")
+    logger.info(f"Shared storage directory: {shared_storage_dir}")
 
     remove_task_shared_storage_dir(shared_storage_dir, args.target)
     try_delete_local_buildgraph_folder(args.build_tag)
@@ -121,7 +121,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     updated_args = update_or_add_argument(
         unknown_args,
-        ["-BuildMachine", f'-SharedStorageDir="{shared_storage_dir}"', "-WriteToSharedStorage", f'-SingleNode="{args.target}"', "-NoP4"],
+        ["-BuildMachine", f'-SharedStorageDir={shared_storage_dir}', "-WriteToSharedStorage", f'-SingleNode={args.target}', "-NoP4"],
     )
 
     # Pass an empty target since it's already specified in the -SingleNode argument

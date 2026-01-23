@@ -9,10 +9,10 @@ from ..context import config, engine, project
 
 def run(target: str, arguments: list[str]) -> int:
     logger.info(f"Run Buildgraph - Target : {target}")
-    logger.debug(f"Arguments : {arguments}")
+    logger.info(f"Arguments : {arguments}")
 
     buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
-    logger.debug(f"Buildgraph XML path : {buildgraph_path}")
+    logger.info(f"Buildgraph XML path : {buildgraph_path}")
 
     if not buildgraph_path.exists():
         raise Exception(f"Impossible to get a valid path to the buildgraph XML file. Current path : {buildgraph_path}")
@@ -22,13 +22,13 @@ def run(target: str, arguments: list[str]) -> int:
         raise Exception(f"The buildgraph file must be a XML file. Current path : {buildgraph_path}")
 
     uat_arguments = ["BuildGraph"]
-    uat_arguments.append(f'-script="{buildgraph_path}"')
+    uat_arguments.append(f'-script={buildgraph_path}')
 
     # We can execute buildgraph without a target if the SingleNode argument is set
     if target != "":
-        uat_arguments.append(f'-target="{target}"')
+        uat_arguments.append(f'-target={target}')
 
-    uat_arguments.append(f'-Project="{project.uproject_path}"')
+    uat_arguments.append(f'-Project={project.uproject_path}')
 
     automation_scripts_directories = config["Project"]["AutomationScriptsDirectories"]
     if automation_scripts_directories == "" or automation_scripts_directories is None:
@@ -62,13 +62,12 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task based on a target and properties.")
     parser.add_argument("target", type=str, default="", help="The target to run in the buildgraph file")
-    parser.add_argument("remainder", nargs="*", help="Properties (-set:K:V) and extra arguments")
     return parser.parse_known_args(argv)
 
 
 def validate_config(target: str, arguments: list[str]) -> None:
     """Validate the configuration values."""
-    pattern = r'-SingleNode="[^"]*"'
+    pattern = r'-SingleNode=[^"]*'
 
     if not target and not any(re.search(pattern, item) for item in arguments):
         raise ValueError("Target is required")
@@ -83,6 +82,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         target = args.target
 
     try:
+        logger.info("Validating configuration")
         validate_config(target, other_arguments)
     except (ValueError, TypeError) as e:
         logger.error(f"Configuration validation failed: {e}")
