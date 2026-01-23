@@ -61,7 +61,7 @@ def run(target: str, arguments: list[str]) -> int:
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task based on a target and properties.")
-    parser.add_argument("target", type=str, default="", help="The target to run in the buildgraph file")
+    parser.add_argument("--target", type=str, default="", help="The target to run in the buildgraph file")
     return parser.parse_known_args(argv)
 
 

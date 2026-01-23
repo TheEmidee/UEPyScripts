@@ -50,7 +50,7 @@ def update_or_add_argument(existing_args: list[str], defaults: list[str]) -> Lis
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task using a shared storage.")
-    parser.add_argument("target", type=str, help="The target to run in the buildgraph file")
+    parser.add_argument("--target", type=str, help="The target to run in the buildgraph file")
     parser.add_argument("--build_tag", type=str, help="The tag that will be used to define a folder on a shared storage")
     #parser.add_argument("remainder", nargs=argparse.REMAINDER, help="Properties (-set:K:V) and extra arguments")
 
@@ -107,6 +107,8 @@ def cleanup_local_folder() -> None:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args, unknown_args = parse_arguments(argv)
 
+    if not args.target:
+        raise ValueError("Target is required")
     if not args.build_tag:
         raise ValueError("Build tag is required")
 
@@ -123,9 +125,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         unknown_args,
         ["-BuildMachine", f'-SharedStorageDir={shared_storage_dir}', "-WriteToSharedStorage", f'-SingleNode={args.target}', "-NoP4"],
     )
-
-    # Pass an empty target since it's already specified in the -SingleNode argument
-    updated_args.insert(0, "")
 
     return buildgraph.main(updated_args)
 
