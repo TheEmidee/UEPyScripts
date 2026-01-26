@@ -40,8 +40,6 @@
   - Continuous Integration helpers:
     - ue-ci-cleanup
     - ue-ci-run-buildgraph
-    - ue-tools-archives-rotate
-    - ue-tools-archives-upload
 
 ---
 
@@ -145,72 +143,6 @@ A typical usage of this module in a jenkins pipeline script would look like:
       """
    }
   ```
-
-- `uepyscripts.tools.archives.rotate_archives` : this module allows to archive the result of packaging your game, in a shared folder. The arguments are:
-   - `directory_path` : The folder where to archive the packages. Note that this module will copy the archives in a sub-folder named after the current date with the format `YYYYMMdd`. If a folder already exists with the same date, it will suffix with an incrementing counter `_XX`
-   - `keep_count` : How many versions of the packages you want to keep in `directory_path`. This will remove the extraneous sub-folders to only keep `keep_count` items.
-   - `folder_output_file_name` : Path to a text file where to write the path to the folder where the archive was copied. This is useful if you plan to use this folder for other tasks, such as sending a message in slack, or uploading the archives to an amazon S3 bucket
-
-- `uepyscripts.tools.archives.upload_archives` : this module allows to upload to an amazon S3 bucket all the files inside a folder. The arguments are:
-   - `local_folder` : The folder where to find the files to upload
-   - `bucket_name` : The S3 bucket name
-   - `region` : The region of the bucket
-   - `access_key` and `secret_key` : The keys to access the bucket
-   - `destination_folder` : The folder where to upload in the bucket. As with `rotate_archives`, a sub-folder with the date will be used, and if the folder exists, a suffix will be added.
-   - `keep_count` : Same as with `rotate_archives`, this is used to control how many archives you want to keep.
-   - `output_file` : Path to a text file where the uploaded files URLs will be stored. This can be used in your jenkinsfile to be sent to a slack channel for example.
-
-Here's an example of how we use these 2 modules in our jenkinsfiles:
-
-```groovy
-stage( 'Rotate Archives' ) {
-    pwsh """
-        . "Scripts/PyScripts/.venv/Scripts/ue-tools-archives-rotate.exe" `
-          --directory_path = "//nas/Versions/OurGame/Development/WIP" `
-          --keep_count = "-1" `
-          --folder_output_file_name = "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
-    """
-
-    def folder_name = readFile "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
-    slackSend( channel: '#channel', message: "New Development build available : ${folder_name}" )
-}
-
-stage( 'Upload Archives' ) {
-    def file = readFile "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
-
-    pwsh """
-        . "Scripts/PyScripts/.venv/Scripts/ue-tools-archives-upload.exe" `
-            --local_folder = "${file}" `
-            --bucket_name = "artifacts" `
-            --region = "eu-west-3" `
-            --access_key = "XXXXX" `
-            --secret_key = "YYYYY" `
-            --destination_folder = "Development/" `
-            --keep_count = "-1" `
-            --output_file = "${env.WORKSPACE}/Saved/Temp/uploaded_files_Development.txt" `
-    """
-
-    def uploaded_files = readFile "${env.WORKSPACE}/Saved/Temp/uploaded_files_Development.txt"
-    def lines = uploaded_files.split('\n')
-
-    if ( lines.size() > 0 ) {
-        def message = 'Uploaded builds:\n'
-
-        lines.each { String line ->
-            def parts = line.split(' : ', 2)
-            if (parts.size() == 2) {
-                def url = parts[0].trim()
-                def filename = parts[1].trim()
-                message += "<${url}|${filename}>\n"
-            }
-        }
-
-        slackSend( channel: '#channel', message: message )
-    } else {
-        slackSend( channel: '#channel', color: 'danger', message: 'No files were uploaded' )
-    }
-}
-```
 
 ## Engine installation 🛠️
 
