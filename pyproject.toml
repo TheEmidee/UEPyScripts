@@ -1,0 +1,168 @@
+[project]
+name = "UEPyScripts"
+dynamic = ["version"]
+description = "Collection of Python tools and helpers designed to automate common Unreal Engine project tasks (builds, packaging, editor control, CI tasks, etc.)."
+readme.content-type = "text/markdown"
+readme.file = "README.md"
+keywords = [
+  "unreal engine"
+]
+license = {file = "LICENSE"}
+maintainers = [
+  { name = "Michael Delva", email = "michael@emidee.net" },
+]
+authors = [
+  { name = "Michael Delva", email = "michael@emidee.net" },
+]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "annotated-types",
+  "boto3",
+  "botocore",
+  "colorama",
+  "types-colorama",
+  "jmespath",
+  "MarkupSafe",
+  "packaging",
+  "psutil",
+  "python-dateutil",
+  "pydantic",
+  "pydantic_core",
+  "PyYAML",
+  "s3transfer",
+  "six",
+  "tqdm",
+  "types-psutil",
+  "types-requests",
+  "types-tqdm",
+  "typing-inspection",
+  "typing_extensions",
+  "urllib3",
+  "invoke",
+  "types-invoke",
+]
+
+urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
+urls.Homepage = "https://github.com/TheEmidee/UEPyScripts"
+urls.Source = "https://github.com/TheEmidee/UEPyScripts"
+urls.Tracker = "https://github.com/TheEmidee/UEPyScripts/issues"
+
+[project.optional-dependencies]
+lint = [ 
+  "ruff",
+  "mypy"
+]
+
+dist = [
+  "hatchling",
+  "build",
+  "wheel",
+  "twine",
+  "towncrier"
+]
+
+dev = ["UEPyScripts[lint, dist]"]
+
+[tool.ruff]
+line-length = 150
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle
+    "I",   # isort
+    "ANN", # flake8 type annotations
+    "RUF", # ruff-specific rules
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+disallow_untyped_defs = true
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uepyscripts"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+exclude = [
+    "/.git",
+    "/.github",
+    "/.pytest_cache",
+    "/__pycache__",
+]
+
+[project.scripts]
+ue-run-uat = "uepyscripts.run.uat:main"
+ue-run-ubt = "uepyscripts.run.ubt:main"
+ue-run-buildgraph = "uepyscripts.run.buildgraph:main"
+ue-run-editor = "uepyscripts.tools.ue.run_editor:main"
+ue-generate-solution = "uepyscripts.tools.ue.generate_solution:main"
+ue-close-editor = "uepyscripts.tools.ue.close_editor:main"
+ue-compile-editor = "uepyscripts.tools.ue.compile_editor:main"
+ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
+ue-ci-cleanup = "uepyscripts.tools.ci.cleanup:main"
+ue-ci-run-buildgraph = "uepyscripts.tools.ci.buildgraph:main"
+ue-tools-archives-rotate = "uepyscripts.tools.archives.rotate_archives:main"
+ue-tools-archives-upload = "uepyscripts.tools.archives.upload_archives:main"
+
+[tool.towncrier]
+package = "JenkinsfileGenerator"
+package_dir = "src"
+filename = "CHANGELOG.md"
+directory = ".changelog"
+underlines = ["", "", ""]
+title_format = "## [{version}] - {project_date}"
+issue_format = "[#{issue}](https://github.com/TheEmidee/JenkinsFileGenerator/issues/{issue})"
+all_bullets = true
+
+[[tool.towncrier.type]]
+name = "Security"
+
+[[tool.towncrier.type]]
+name = "Removed"
+
+[[tool.towncrier.type]]
+name = "Deprecated"
+
+[[tool.towncrier.type]]
+name = "Added"
+
+[[tool.towncrier.type]]
+name = "Changed"
+
+[[tool.towncrier.type]]
+name = "Fixed"

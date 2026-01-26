@@ -8,7 +8,7 @@
 
 ## Overview ✅
 
-**UEPyScripts** is a collection of Python tools and PowerShell helpers designed to automate common Unreal Engine project tasks (builds, packaging, editor control, CI tasks, etc.). It provides a reusable CLI (`python -m uepyscripts`) and a PowerShell wrapper (`Tools/PyScript.ps1`) used across project scripts.
+**UEPyScripts** is a collection of Python tools and PowerShell helpers designed to automate common Unreal Engine project tasks (builds, packaging, editor control, CI tasks, etc.). 
 
 ---
 
@@ -30,11 +30,18 @@
 
 ## Features ✨
 
-- Modular Python CLI for tasks (see `uepyscripts` package)
-- PowerShell wrapper to call Python modules from other project scripts (`Tools/PyScript.ps1`)
-- Buildgraph runner with JSON properties and config file support
-- Engine utilities (check/compile/run editor, close editor)
-- CI helpers (artifact rotation, S3 upload, cleanup)
+- Multiple helper scripts:
+  - Engine Utilities
+    - ue-run-buildgraph
+    - ue-close-editor
+    - ue-compile-editor
+    - ue-run-editor
+    - ue-check-engine-installation
+  - Continuous Integration helpers:
+    - ue-ci-cleanup
+    - ue-ci-run-buildgraph
+    - ue-tools-archives-rotate
+    - ue-tools-archives-upload
 
 ---
 
@@ -67,7 +74,7 @@ Bootstrap the project:
 - Execute `Setup.ps1` to:
    1. check if python is installed, and install it if not
    2. create the python virtual environment
-   3. call the script `check_engine_installation`
+   3. call the script `ue-check-engine-installation`
 - Execute `CompileAndRunEditor.ps1` to compile your C++ code and run the editor when done !
 - If you use buildgraph in your project:
    1. Uncomment the buildgraph properties in `Config/PyScripts/config.ini` and adapt to your project
@@ -75,47 +82,28 @@ Bootstrap the project:
 
 ## Usage Examples 🔧
 
-- Use the PowerShell wrapper `PyScripts/Tools/PyScript.ps1` to execute the python modules. This script will setup the virtual environment if needed before executing the module.
+- Execute a buildgraph target
 
-  ```powershell
-  . (Join-Path -Path $PSScriptRoot -ChildPath "Scripts/PyScripts/Tools/PyScript.ps1") `
-    -moduleName "uepyscripts.run.buildgraph" `
-    -arguments @{
-      target = "Buildgraph Task Name";
-      properties = @"
-      { 
-          "Clean" : "True",
-          "Targets" : "MyGameClient+MyGameServer",
-          "TargetConfigurations" : "Development+Shipping",
-      }
-  "@;
-    }
+  ```bash
+  ue-run-buildgraph.exe --target "Buildgraph Task Name" -set:Clean=True -set:Targets=MyGameClient+MyGameServer -set:TargetConfigurations=Development+Shipping
   ```
 
 - You can directly call `UAT` or `UBT`:
 
-  ```powershell
-  . (Join-Path -Path $PSScriptRoot -ChildPath "Scripts/PyScripts/Tools/PyScript.ps1") `
-    -moduleName "uepyscripts.run.uat" `
-    -arguments @{
-        arguments = @" 
-        [ "turnkey" ]
-  "@;
-    }
+  ```bash
+    ue-run-uat.exe turnkey
   ```
 
 - You can generate the visual studio solution:
 
-  ```powershell
-  . (Join-Path -Path $PSScriptRoot -ChildPath "Scripts/PyScripts/Tools/PyScript.ps1") -moduleName "uepyscripts.tools.generate_solution"
-    }
+  ```bash
+    ue-generate-solution.exe
   ```
 
 - You can update your engine locally if it can't be found for your projectn (See below for more explanations):
 
-  ```powershell
-  .( Join-Path -Path $PSScriptRoot -ChildPath "./Scripts/PyScripts/Tools/PyScript.ps1" ) -moduleName "uepyscripts.tools.ue.check_engine_installation"
-    }
+  ```bash
+  ue-check-engine-installation.exe
   ```
 
 ## Continuous Integration ⚙️
@@ -130,20 +118,13 @@ Ideally you should be using https://github.com/TheEmidee/JenkinsFileGenerator to
 A typical usage of this module in a jenkins pipeline script would look like:
 
   ```groovy
-  def buildgraph_properties = """
-   -set:Clean=True
-   -set:Targets=MyGameClient+MyGameServer
-   -set:TargetConfigurations=Development+Shipping
-   """.stripIndent().trim()
-
-   pwsh """
-      ."Scripts/PyScripts/Tools/PyScript.ps1" `
-         -moduleName "uepyscripts.tools.ci.buildgraph" `
-         -arguments @{
-               target = "${taskName}"
-               build_tag = "${BUILD_TAG}"
-               string_arguments = "${buildgraph_properties}"
-         }
+  pwsh """
+      ."Scripts/PyScripts/.venv/Scripts/ue-ci-run-buildgraph.exe" `
+        --target="${taskName}" `
+        --build_tag = "${BUILD_TAG}"
+        -set:Clean=True
+        -set:Targets=MyGameClient+MyGameServer
+        -set:TargetConfigurations=Development+Shipping
    """
   ```
 
@@ -159,13 +140,9 @@ A typical usage of this module in a jenkins pipeline script would look like:
 
   ```groovy
    stage( 'Cleanup' ) {
-         pwsh """
-            ."Scripts/PyScripts/Tools/PyScript.ps1" `
-               -moduleName "uepyscripts.tools.ci.cleanup" `
-               -arguments @{
-                     build_tag = "${BUILD_TAG}"
-               }
-         """
+      pwsh """
+      ."Scripts/PyScripts/.venv/Scripts/ue-ci-cleanup.exe" --build_tag="${BUILD_TAG}"
+      """
    }
   ```
 
@@ -188,13 +165,10 @@ Here's an example of how we use these 2 modules in our jenkinsfiles:
 ```groovy
 stage( 'Rotate Archives' ) {
     pwsh """
-        ."PyScripts/Tools/PyScript.ps1" `
-            -moduleName "uepyscripts.tools.archives.rotate_archives" `
-            -arguments @{
-                directory_path = "//nas/Versions/OurGame/Development/WIP"
-                keep_count = "-1"
-                folder_output_file_name = "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
-            }
+        . "Scripts/PyScripts/.venv/Scripts/ue-tools-archives-rotate.exe" `
+          --directory_path = "//nas/Versions/OurGame/Development/WIP" `
+          --keep_count = "-1" `
+          --folder_output_file_name = "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
     """
 
     def folder_name = readFile "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
@@ -205,18 +179,15 @@ stage( 'Upload Archives' ) {
     def file = readFile "${env.WORKSPACE}/Saved/Temp/latest_archive_Development.txt"
 
     pwsh """
-        ."PyScripts/Tools/PyScript.ps1" `
-            -moduleName "uepyscripts.tools.archives.upload_archives" `
-            -arguments @{
-                local_folder = "${file}"
-                bucket_name = "artifacts"
-                region = "eu-west-3"
-                access_key = "XXXXX"
-                secret_key = "YYYYY"
-                destination_folder = "Development/"
-                keep_count = "-1"
-                output_file = "${env.WORKSPACE}/Saved/Temp/uploaded_files_Development.txt"
-            }
+        . "Scripts/PyScripts/.venv/Scripts/ue-tools-archives-upload.exe" `
+            --local_folder = "${file}" `
+            --bucket_name = "artifacts" `
+            --region = "eu-west-3" `
+            --access_key = "XXXXX" `
+            --secret_key = "YYYYY" `
+            --destination_folder = "Development/" `
+            --keep_count = "-1" `
+            --output_file = "${env.WORKSPACE}/Saved/Temp/uploaded_files_Development.txt" `
     """
 
     def uploaded_files = readFile "${env.WORKSPACE}/Saved/Temp/uploaded_files_Development.txt"
@@ -300,7 +271,6 @@ We welcome contributions — please follow these steps:
 
 - Check `Config/` and `uepyscripts/internal/config.py` for project-specific settings.
 - If `buildgraph` fails, ensure `Config/Project` has a valid `BuildgraphPath` and the UAT tool is accessible.
-- For PowerShell wrapper errors, verify `$PSScriptRoot` and relative paths to `Tools/PyScript.ps1` are correct.
 - When reporting issues, include:
   - Python version
   - Unreal Engine version
