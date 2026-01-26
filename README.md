@@ -53,13 +53,9 @@
 
 ## Installation 🛠️
 
-Clone into your UE project:
-
+- The easy way is to use [UEPyScriptsBootstrap](https://github.com/TheEmidee/UEPyScriptsBootstrap)
 - You can download the sources and put them directly in your project
-- You can add as a submodule:
-
-  git submodule add git@github.com:TheEmidee/UEPyScripts Scripts/PyScripts
-
+- You can add as a submodule: `git submodule add git@github.com:TheEmidee/UEPyScripts Scripts/PyScripts`
 - You can add as a python requirement:
 
   - Create a file named `requirements.txt`
@@ -67,25 +63,6 @@ Clone into your UE project:
   - Activate a virtual environment : `python -m venv .venv` and `& ".\.venv\Scripts\Activate.ps1"`
   - Upgrade pip : `python -m pip install --upgrade pip`
   - Install the module : `pip install -r requirements --upgrade`
-
-
-## Quick Start 🚀
-
-Bootstrap the project:
-
-- Execute the script `Bootstrap.ps1` in the folder `Tools`. This script will create:
-   - `Setup.ps1` at the root of the project.
-   - `Config.ini` in `Config/PyScripts`
-   - `CompileAndRunEditor.ps1` also at the root
-   - `BuildgraphTask.ps1` in the folder `Scripts/Project`
-- Execute `Setup.ps1` to:
-   1. check if python is installed, and install it if not
-   2. create the python virtual environment
-   3. call the script `ue-check-engine-installation`
-- Execute `CompileAndRunEditor.ps1` to compile your C++ code and run the editor when done !
-- If you use buildgraph in your project:
-   1. Uncomment the buildgraph properties in `Config/PyScripts/config.ini` and adapt to your project
-   2. Duplicate the script `BuildgraphTask.ps1` and adapt it to run your own targets.
 
 ## Usage Examples 🔧
 
