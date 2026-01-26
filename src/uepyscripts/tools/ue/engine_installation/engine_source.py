@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional, Type
 from urllib.parse import quote
 
+from gamedevtools.s3 import S3Client
+
 from .... import logger
 from ....internal.config import Config
 from ....internal.project import Project
 from ....tools.helpers import copy_with_robocopy, is_engine_from_egs
-from ....tools.s3.s3_client import S3Client
 from ....tools.winreg import write_registry_value
 
 
