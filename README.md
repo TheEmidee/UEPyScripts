@@ -56,9 +56,18 @@
 Clone into your UE project:
 
 - You can download the sources and put them directly in your project
-- Or add as a submodule:
+- You can add as a submodule:
 
   git submodule add git@github.com:TheEmidee/UEPyScripts Scripts/PyScripts
+
+- You can add as a python requirement:
+
+  - Create a file named `requirements.txt`
+  - Add `UEPyScripts>=1.2.1` in this file
+  - Activate a virtual environment : `python -m venv .venv` and `& ".\.venv\Scripts\Activate.ps1"`
+  - Upgrade pip : `python -m pip install --upgrade pip`
+  - Install the module : `pip install -r requirements --upgrade`
+
 
 ## Quick Start 🚀
 
@@ -117,7 +126,7 @@ A typical usage of this module in a jenkins pipeline script would look like:
 
   ```groovy
   pwsh """
-      ."Scripts/PyScripts/.venv/Scripts/ue-ci-run-buildgraph.exe" `
+      ."Scripts/Python/.venv/Scripts/ue-ci-run-buildgraph.exe" `
         --target="${taskName}" `
         --build_tag = "${BUILD_TAG}"
         -set:Clean=True
@@ -139,14 +148,14 @@ A typical usage of this module in a jenkins pipeline script would look like:
   ```groovy
    stage( 'Cleanup' ) {
       pwsh """
-      ."Scripts/PyScripts/.venv/Scripts/ue-ci-cleanup.exe" --build_tag="${BUILD_TAG}"
+      ."Scripts/Python/.venv/Scripts/ue-ci-cleanup.exe" --build_tag="${BUILD_TAG}"
       """
    }
   ```
 
 ## Engine installation 🛠️
 
-You can use the module `uepyscripts.tools.ue.check_engine_installation` to automatically install the engine version that your project requires.
+You can use the module `uepyscripts.tools.ue.check_engine_installation` (or `ue-check-engine-installation`) to automatically install the engine version that your project requires.
 
 The requirements for this to work are as follow:
 
@@ -179,12 +188,11 @@ How the script works:
 
   ```powershell
   .\setup_venv.ps1
-  .\.venv\Scripts\Activate.ps1
-  pip install -r requirements.txt
   ```
 
 - Linting & formatting
-  - Use `black` and `ruff` (or your chosen formatters/linters). Add checks to CI as required.
+  - Use `ruff check .` and `ruff format .` Add checks to CI as required.
+  - Use `mypy .`
 
 ---
 
