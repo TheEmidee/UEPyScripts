@@ -33,8 +33,8 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
             path = Path(registry_value)
             if path.exists():
                 return path
-            
-    # Some installations are listed in LauncherInstalled.dat            
+
+    # Some installations are listed in LauncherInstalled.dat
     class EpicInstallation(BaseModel):
         InstallLocation: str
         AppName: str
@@ -52,22 +52,22 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
         # os.path.expandvars automatically replaces %PROGRAMDATA% with the actual path
         raw_path = r"%PROGRAMDATA%\Epic\UnrealEngineLauncher\LauncherInstalled.dat"
         expanded_path = Path(os.path.expandvars(raw_path))
-        
+
         return expanded_path
-    
+
     dat_path = get_dat_file_path()
     if not dat_path.exists():
         return None
-    
+
     try:
         with open(dat_path, "r", encoding="utf-8") as f:
             json_str = f.read()
             data = LauncherInstalledData.model_validate_json(json_str)
-        
+
             for item in data.InstallationList:
                 if item.is_engine and item.AppVersion.startswith(project.engine_association):
                     return Path(item.InstallLocation)
-                
+
     except Exception as e:
         print(f"Error parsing manifest: {e}")
 

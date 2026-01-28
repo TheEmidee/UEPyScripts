@@ -43,7 +43,7 @@ class Engine:
 
                 return -1
 
-    def __init__(self, project: Project, root_path : Path) -> None:
+    def __init__(self, project: Project, root_path: Path) -> None:
         self.project = project
         self.root_path = root_path
         self.path = self.root_path.joinpath("Engine").resolve()
