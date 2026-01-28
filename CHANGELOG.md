@@ -9,6 +9,11 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.2] - 2026-01-28
+
+No significant changes.
+
+
 ## [1.2.1] - 2026-01-28
 
 ### Added
