@@ -3,6 +3,8 @@ import winreg
 from pathlib import Path
 from typing import Optional
 
+from pydantic import BaseModel
+
 from ..internal.project import Project
 from ..tools.helpers import get_engine_root_folder_from_env_var, is_engine_from_egs
 from ..tools.winreg import get_registry_value
@@ -31,6 +33,43 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
             path = Path(registry_value)
             if path.exists():
                 return path
+            
+    # Some installations are listed in LauncherInstalled.dat            
+    class EpicInstallation(BaseModel):
+        InstallLocation: str
+        AppName: str
+        AppVersion: str
+
+        @property
+        def is_engine(self) -> bool:
+            """Checks if the installation is an Unreal Engine build."""
+            return self.AppName.startswith("UE_")
+
+    class LauncherInstalledData(BaseModel):
+        InstallationList: list[EpicInstallation]
+
+    def get_dat_file_path() -> Path:
+        # os.path.expandvars automatically replaces %PROGRAMDATA% with the actual path
+        raw_path = r"%PROGRAMDATA%\Epic\UnrealEngineLauncher\LauncherInstalled.dat"
+        expanded_path = Path(os.path.expandvars(raw_path))
+        
+        return expanded_path
+    
+    dat_path = get_dat_file_path()
+    if not dat_path.exists():
+        return None
+    
+    try:
+        with open(dat_path, "r", encoding="utf-8") as f:
+            json_str = f.read()
+            data = LauncherInstalledData.model_validate_json(json_str)
+        
+            for item in data.InstallationList:
+                if item.is_engine and item.AppVersion.startswith(project.engine_association):
+                    return Path(item.InstallLocation)
+                
+    except Exception as e:
+        print(f"Error parsing manifest: {e}")
 
     return None
 
