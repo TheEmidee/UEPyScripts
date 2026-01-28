@@ -43,9 +43,9 @@ class Engine:
 
                 return -1
 
-    def __init__(self, project: Project) -> None:
+    def __init__(self, project: Project, root_path : Path) -> None:
         self.project = project
-        self.root_path = resolve_engine_path(project)
+        self.root_path = root_path
         self.path = self.root_path.joinpath("Engine").resolve()
         self.version = self.get_version_number()
         self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"), True)
@@ -101,6 +101,8 @@ class Engine:
 
 
 def resolve_engine(project: Project) -> Engine:
-    engine = Engine(project)
+    root_path = resolve_engine_path(project)
+
+    engine = Engine(project, root_path)
     logger.info(engine)
     return engine
