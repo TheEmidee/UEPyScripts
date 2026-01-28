@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.1] - 2026-01-28
+
+### Added
+
+- Try to find the engine installation path from LauncherInstalled.dat of the EGS program data when the information can't be found in the registry ([#14](https://github.com/TheEmidee/JenkinsFileGenerator/issues/14))
+
+
 ## [1.2.0] - 2026-01-26
 
 ### Removed
