@@ -45,7 +45,7 @@
 
 ## Requirements ⚙️
 
-- Python 3.10 or newer
+- Python 3.12 or newer
 - Windows (primary target; other platforms may work)
 - Unreal Engine (project-specific; config in `Config/`)
 
@@ -161,15 +161,16 @@ How the script works:
 
 ## Development & Testing 🧪
 
+- Install [Astral UV](https://docs.astral.sh/uv/)
 - Setup dev environment and install dependencies:
 
   ```powershell
-  .\setup_venv.ps1
+  .\setup-venv.ps1
   ```
 
 - Linting & formatting
-  - Use `ruff check .` and `ruff format .` Add checks to CI as required.
-  - Use `mypy .`
+  - Use `uv run ruff check .` and `uv run ruff format .` Add checks to CI as required.
+  - Use `uv run mypy .`
 
 ---
 
