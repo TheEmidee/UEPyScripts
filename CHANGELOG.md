@@ -9,6 +9,15 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.3] - 2026-02-10
+
+### Changed
+
+- Made the scripts in the tools folder return an error code when something goes wrong
+  Updated toolchain to use UV
+  Updated GitHub actions to use UV ([#16](https://github.com/TheEmidee/JenkinsFileGenerator/issues/16))
+
+
 ## [1.2.2] - 2026-01-28
 
 No significant changes.
