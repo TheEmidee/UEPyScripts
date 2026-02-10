@@ -14,3 +14,7 @@ def main() -> None:
             if choice == "Y" or choice == "y":
                 proc.kill()
             break
+
+
+if __name__ == "__main__":
+    main()
