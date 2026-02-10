@@ -172,6 +172,8 @@ How the script works:
   - Use `uv run ruff check .` and `uv run ruff format .` Add checks to CI as required.
   - Use `uv run mypy .`
 
+To create a new release, you must be on the `develop` branch, and call `invoke create_release`
+
 ---
 
 ## Contribution Guide 🤝
