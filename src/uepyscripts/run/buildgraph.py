@@ -30,7 +30,7 @@ def run(target: str, arguments: list[str]) -> int:
 
     uat_arguments.append(f"-Project={project.uproject_path}")
 
-    automation_scripts_directories = config["Project"]["AutomationScriptsDirectories"]
+    automation_scripts_directories = config["Project"].get("AutomationScriptsDirectories")
     if automation_scripts_directories == "" or automation_scripts_directories is None:
         logger.info("No automation scripts directory is set")
     else:
@@ -46,11 +46,15 @@ def run(target: str, arguments: list[str]) -> int:
             logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
             uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
 
-    shared_properties = dict(pair.split("=") for pair in config["Project"]["BuildgraphSharedProperties"].split("+"))
+    shared_properties_str = config["Project"].get("BuildgraphSharedProperties", "")
+    if shared_properties_str == "" or shared_properties_str is None:
+        logger.info("No shared properties to set")
+    else:
+        shared_properties = dict(pair.split("=") for pair in shared_properties_str.split("+")) if shared_properties_str else {}
 
-    if shared_properties is not None:
-        for key, value in shared_properties.items():
-            uat_arguments.append(f"-set:{key}={value}")
+        if shared_properties is not None:
+            for key, value in shared_properties.items():
+                uat_arguments.append(f"-set:{key}={value}")
 
     for arg in arguments:
         uat_arguments.append(arg)
