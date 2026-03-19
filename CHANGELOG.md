@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.4] - 2026-03-19
+
+### Fixed
+
+- Don't throw an exception when there's no property Project:BuildgraphSharedProperties in the config.ini file ([#19](https://github.com/TheEmidee/JenkinsFileGenerator/issues/19))
+
+
 ## [1.2.3] - 2026-02-10
 
 ### Changed
