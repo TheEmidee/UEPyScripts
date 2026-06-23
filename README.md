@@ -168,6 +168,27 @@ How the script works:
   .\setup-venv.ps1
   ```
 
+- In VS Code, you can create a `launch.json` file like this one. It's important to use the `module` setting so that relative imports don't raise exceptions.
+
+```
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uepyscripts.tools.ue.copy_engine_buildgraph_tasks",
+            "cwd": "ABSOLUTE_PATH_TO_PROJECT",
+            "console": "integratedTerminal",
+            "args": [
+                "--uproject_path=D:\\PATH_TO_UPROJECT.uproject"
+            ]
+        }
+    ]
+}
+```
+
 - Linting & formatting
   - Use `uv run ruff check .` and `uv run ruff format .` Add checks to CI as required.
   - Use `uv run mypy .`
@@ -182,8 +203,11 @@ We welcome contributions — please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-change`
+3. Add entries in the .changelog folder for towncrier. You can read the [README](.changelog/README.md) file for more information.
 4. Run lint locally
-5. Submit a pull request describing the change
+5. Update documentation
+6. Submit a pull request describing the change
+
 
 ---
 
