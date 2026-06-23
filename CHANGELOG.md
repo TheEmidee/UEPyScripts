@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.5] - 2026-06-23
+
+### Changed
+
+- - Added optional path to a uproject file in `resolve_project` ([#20](https://github.com/TheEmidee/JenkinsFileGenerator/issues/20))
+
+
 ## [1.2.4] - 2026-03-19
 
 ### Fixed
