@@ -47,12 +47,14 @@ class Engine:
         self.project = project
         self.root_path = root_path
         self.path = self.root_path.joinpath("Engine").resolve()
+        self.build_path = self.path.joinpath("Build").resolve()
+        self.batchfiles_path = self.build_path.joinpath("BatchFiles").resolve()
         self.version = self.get_version_number()
-        self.uat_path = self.Runner(self.path.joinpath("Build/BatchFiles/RunUAT.bat"), True)
+        self.uat_path = self.Runner(self.batchfiles_path.joinpath("RunUAT.bat"), True)
         self.ubt_path = self.Runner(
             self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"), True, True, [str(self.project.uproject_path)]
         )
-        self.build_bat_path = self.Runner(self.path.joinpath("Build/BatchFiles/Build.bat"), True)
+        self.build_bat_path = self.Runner(self.batchfiles_path.joinpath("Build.bat"), True)
         self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False, False, [str(self.project.uproject_path)])
 
     def uat(self, args: list[str] = []) -> int:
@@ -70,7 +72,7 @@ class Engine:
     def get_version_number(self) -> Version:
         version = ""
 
-        with open(self.path.joinpath("Build/Build.version")) as build_version_file:
+        with open(self.build_path.joinpath("Build.version")) as build_version_file:
             version_json = json.load(build_version_file)
             major = version_json["MajorVersion"]
             minor = version_json["MinorVersion"]
@@ -80,7 +82,7 @@ class Engine:
         if version == "":
             raise Exception("Impossible to find the version number of the engine")
 
-        jenkins_file = Path(self.path.joinpath("Build/JenkinsBuild.version"))
+        jenkins_file = Path(self.build_path.joinpath("JenkinsBuild.version"))
 
         if jenkins_file.exists():
             with open(jenkins_file) as jenkins_version_file:
