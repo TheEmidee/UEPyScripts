@@ -203,8 +203,11 @@ We welcome contributions — please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-change`
+3. Add entries in the .changelog folder for towncrier. You can read the [README](.changelog/README.md) file for more information.
 4. Run lint locally
-5. Submit a pull request describing the change
+5. Update documentation
+6. Submit a pull request describing the change
+
 
 ---
 
