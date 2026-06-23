@@ -68,10 +68,13 @@ def find_parent_with_project_file(starting_path: Path, max_parents: int = 10) ->
     return None
 
 
-def resolve_project() -> Project:
-    dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
-    uproject_path = find_parent_with_project_file(dir_path)
+def resolve_project(uproject_path: Path = None) -> Project:
     if not uproject_path:
+        dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
+        uproject_path = find_parent_with_project_file(dir_path)
+        if not uproject_path:
+            raise Exception(f"Could not find a uproject file from {dir_path}")
+    elif not uproject_path.exists():
         raise Exception(f"Could not find a uproject file from {dir_path}")
 
     logger.debug(f"Found uproject file at {uproject_path}")
