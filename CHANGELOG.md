@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.6] - 2026-06-25
+
+### Fixed
+
+- Various fixes for the engine resolver ([#21](https://github.com/TheEmidee/JenkinsFileGenerator/issues/21))
+
+
 ## [1.2.5] - 2026-06-23
 
 ### Changed
