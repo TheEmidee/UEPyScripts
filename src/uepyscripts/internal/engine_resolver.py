@@ -18,9 +18,7 @@ def resolve_engine_from_env_var(project: Project) -> Optional[Path]:
 def resolve_engine_from_registry(project: Project) -> Optional[Path]:
     path = get_registry_value(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Epic Games\Unreal Engine\Builds", project.engine_association)
     if path:
-        path = Path(path)
-        if path.exists():
-            return path
+        return Path(path)
 
     return None
 
@@ -31,9 +29,7 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
             winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\EpicGames\Unreal Engine\{project.engine_association}", "InstalledDirectory"
         )
         if registry_value:
-            path = Path(registry_value)
-            if path.exists():
-                return path
+            return Path(registry_value)
 
     # Some installations are listed in LauncherInstalled.dat
     class EpicInstallation(BaseModel):
