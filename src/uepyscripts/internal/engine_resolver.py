@@ -84,10 +84,10 @@ def resolve_engine_from_path(project: Project) -> Optional[Path]:
 
 def resolve_engine_path(project: Project) -> Path:
     resolvers = [
-        resolve_engine_from_env_var,
         resolve_engine_from_registry,
         resolve_engine_from_egs,
         resolve_engine_from_path,
+        resolve_engine_from_env_var,
     ]
 
     for resolver in resolvers:
