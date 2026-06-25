@@ -5,6 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from .. import logger
 from ..internal.project import Project
 from ..tools.helpers import get_engine_root_folder_from_env_var, is_engine_from_egs
 from ..tools.winreg import get_registry_value
@@ -69,7 +70,7 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
                     return Path(item.InstallLocation)
 
     except Exception as e:
-        print(f"Error parsing manifest: {e}")
+        logger.error(f"Error parsing manifest: {e}")
 
     return None
 
@@ -93,6 +94,7 @@ def resolve_engine_path(project: Project) -> Path:
     for resolver in resolvers:
         path = resolver(project)
         if path:
+            logger.info(f"Engine path resolved via '{resolver.__name__}': {path}")
             break
     else:
         raise FileNotFoundError("Impossible to locate the engine")
