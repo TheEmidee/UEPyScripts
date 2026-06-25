@@ -100,7 +100,9 @@ def resolve_engine_path(project: Project) -> Path:
     else:
         raise FileNotFoundError("Impossible to locate the engine")
 
-    if not (path.exists() and str(path).replace(" ", "") not in ["", ".", "\\"]):
+    path_str = str(path).strip()
+    # Check that the path exists and is not a degenerate path containing only . or \\
+    if not (path.exists() and path_str not in ["", ".", "\\"]):
         raise FileNotFoundError("Impossible to locate the engine")
 
     return path
