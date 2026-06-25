@@ -88,6 +88,8 @@ def resolve_engine_path(project: Project) -> Path:
         resolve_engine_from_registry,
         resolve_engine_from_egs,
         resolve_engine_from_path,
+        # Resolve last with the environment variable to avoid failing the resolution on a machine
+        # where there's the environment variable but the engine is installed using the launcher
         resolve_engine_from_env_var,
     ]
 
