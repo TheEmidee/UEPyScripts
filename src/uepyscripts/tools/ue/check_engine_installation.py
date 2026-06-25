@@ -16,6 +16,7 @@ which is useful when executed on a build pipeline like Jenkins or Horde.
 """
 
 import argparse
+from pathlib import Path
 
 from ... import logger
 from ...internal.engine import resolve_engine
@@ -26,6 +27,7 @@ from ...tools.ue.engine_installation.engine_installer import EngineInstaller
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
+    parser.add_argument("--uproject_path", type=Path, help="Path to a uproject file. If not set, resolve_project will try to find one in its folder hierarchy")
     parser.add_argument("--unattended", action="store_true", help="Disable interactive prompts")
 
     return parser.parse_args()
@@ -37,7 +39,7 @@ def main() -> None:
     args = parse_arguments()
 
     try:
-        project = resolve_project()
+        project = resolve_project(args.uproject_path)
     except Exception as e:
         logger.fatal(f"Project resolution failed: {e}")
         exit(1)
