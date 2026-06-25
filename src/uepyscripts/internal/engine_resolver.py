@@ -73,6 +73,9 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
 
 def resolve_engine_from_path(project: Project) -> Optional[Path]:
     path = Path(project.engine_association)
+    if not os.path.isabs(path):
+        path = (project.root_folder / path).resolve()
+
     if os.path.isabs(path):
         return path
 
