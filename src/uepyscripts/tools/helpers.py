@@ -32,10 +32,7 @@ def get_engine_root_folder_from_env_var(project_engine_association: str) -> Opti
         path = Path(node_ue_root)
         if project_engine_association:
             path = path.joinpath(project_engine_association)
-        if path.exists():
-            return path
-
-        raise FileNotFoundError(f"The environment variable is set to {node_ue_root} but the folder {path} does not exist")
+        return path
 
     return None
 

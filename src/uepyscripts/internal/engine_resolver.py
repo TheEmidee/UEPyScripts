@@ -5,6 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from .. import logger
 from ..internal.project import Project
 from ..tools.helpers import get_engine_root_folder_from_env_var, is_engine_from_egs
 from ..tools.winreg import get_registry_value
@@ -17,9 +18,7 @@ def resolve_engine_from_env_var(project: Project) -> Optional[Path]:
 def resolve_engine_from_registry(project: Project) -> Optional[Path]:
     path = get_registry_value(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Epic Games\Unreal Engine\Builds", project.engine_association)
     if path:
-        path = Path(path)
-        if path.exists():
-            return path
+        return Path(path)
 
     return None
 
@@ -30,9 +29,7 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
             winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\EpicGames\Unreal Engine\{project.engine_association}", "InstalledDirectory"
         )
         if registry_value:
-            path = Path(registry_value)
-            if path.exists():
-                return path
+            return Path(registry_value)
 
     # Some installations are listed in LauncherInstalled.dat
     class EpicInstallation(BaseModel):
@@ -69,13 +66,16 @@ def resolve_engine_from_egs(project: Project) -> Optional[Path]:
                     return Path(item.InstallLocation)
 
     except Exception as e:
-        print(f"Error parsing manifest: {e}")
+        logger.error(f"Error parsing manifest: {e}")
 
     return None
 
 
 def resolve_engine_from_path(project: Project) -> Optional[Path]:
     path = Path(project.engine_association)
+    if not os.path.isabs(path):
+        path = (project.root_folder / path).resolve()
+
     if os.path.isabs(path):
         return path
 
@@ -84,20 +84,25 @@ def resolve_engine_from_path(project: Project) -> Optional[Path]:
 
 def resolve_engine_path(project: Project) -> Path:
     resolvers = [
-        resolve_engine_from_env_var,
         resolve_engine_from_registry,
         resolve_engine_from_egs,
         resolve_engine_from_path,
+        # Resolve last with the environment variable to avoid failing the resolution on a machine
+        # where there's the environment variable but the engine is installed using the launcher
+        resolve_engine_from_env_var,
     ]
 
     for resolver in resolvers:
         path = resolver(project)
         if path:
+            logger.info(f"Engine path resolved via '{resolver.__name__}': {path}")
             break
     else:
         raise FileNotFoundError("Impossible to locate the engine")
 
-    if not (path.exists() and str(path).replace(" ", "") not in ["", ".", "\\"]):
+    path_str = str(path).strip()
+    # Check that the path exists and is not a degenerate path containing only . or \\
+    if not (path.exists() and path_str not in ["", ".", "\\"]):
         raise FileNotFoundError("Impossible to locate the engine")
 
     return path
