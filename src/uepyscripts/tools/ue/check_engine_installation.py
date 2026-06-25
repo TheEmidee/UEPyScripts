@@ -27,7 +27,11 @@ from ...tools.ue.engine_installation.engine_installer import EngineInstaller
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
-    parser.add_argument("--uproject_path", type=Path, help="Path to a uproject file. If not set, resolve_project will try to find one in its folder hierarchy")
+    parser.add_argument(
+        "--uproject_path",
+        type=Path,
+        help=("Optional path to a uproject file.If not set, resolve_project will try to find one in its folder hierarchy"),
+    )
     parser.add_argument("--unattended", action="store_true", help="Disable interactive prompts")
 
     return parser.parse_args()
