@@ -1,1 +1,0 @@
-Fixed the engine resolver by path which would return a semantically valid path to a non-existing directory, preventing the resolution of the engine path with the remaining methods

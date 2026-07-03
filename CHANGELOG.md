@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.2.7] - 2026-07-03
+
+### Fixed
+
+- Fixed the engine resolver by path which would return a semantically valid path to a non-existing directory, preventing the resolution of the engine path with the remaining methods ([#22](https://github.com/TheEmidee/JenkinsFileGenerator/issues/22))
+
+
 ## [1.2.6] - 2026-06-25
 
 ### Fixed
