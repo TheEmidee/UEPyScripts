@@ -76,7 +76,9 @@ def resolve_engine_from_path(project: Project) -> Optional[Path]:
     if not os.path.isabs(path):
         path = (project.root_folder / path).resolve()
 
-    if os.path.isabs(path):
+    # Check path exists otherwise we could return a semantically valid path to a folder which does not exist
+    # and that would make the resolve fail without trying resolvers which are further down in the list
+    if os.path.isabs(path) and path.exists():
         return path
 
     return None
