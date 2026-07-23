@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -44,6 +43,10 @@ class Project:
     def engine_association(self) -> str:
         return self.uproject.engine_association
 
+    @property
+    def is_native_project(self) -> bool:
+        return not self.engine_association
+
     def __str__(self) -> str:
         return f"""
 ----- Project infos -----
@@ -53,6 +56,24 @@ class Project:
 * EngineAssociation : {self.engine_association}
 ----- Project infos -----
         """
+
+
+EXCLUDED_DIR_NAMES = {"Engine", "FeaturePacks", "Samples", "Scripts", "Templates", ".git"}
+
+
+def find_uproject_in_subfolders(root: Path) -> Optional[Path]:
+    """Recursively search for a .uproject file under root, skipping excluded folders."""
+    for entry in root.iterdir():
+        if entry.is_dir():
+            if entry.name in EXCLUDED_DIR_NAMES:
+                continue
+            found = find_uproject_in_subfolders(entry)
+            if found:
+                return found
+        elif entry.is_file() and entry.suffix == ".uproject":
+            return entry.resolve()
+
+    return None
 
 
 def find_parent_with_project_file(starting_path: Path, max_parents: int = 10) -> Optional[Path]:
@@ -65,12 +86,16 @@ def find_parent_with_project_file(starting_path: Path, max_parents: int = 10) ->
             if file.is_file() and file.suffix == ".uproject":
                 return file.resolve()
 
+        build_version_path = path / "Engine" / "Build" / "Build.version"
+        if build_version_path.is_file():
+            return find_uproject_in_subfolders(path)
+
     return None
 
 
 def resolve_project(uproject_path: Optional[Path] = None) -> Project:
     if not uproject_path:
-        dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
+        dir_path = Path.cwd()
         uproject_path = find_parent_with_project_file(dir_path)
         if not uproject_path:
             raise Exception(f"Could not find a uproject file from {dir_path}")
