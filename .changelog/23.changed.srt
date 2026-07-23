@@ -1,1 +1,0 @@
-Added support for native projects when resolving the project or the engine
