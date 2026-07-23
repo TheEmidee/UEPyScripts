@@ -63,9 +63,9 @@ class TaskList:
 
 class EngineInstaller:
     def __init__(self, project: Project, unattended: bool = False) -> None:
+        self.project = project
         self.check_requirements()
 
-        self.project = project
         try:
             self.engine_destination_folder = resolve_engine_destination(project)
         except FileNotFoundError as e:
@@ -94,6 +94,9 @@ class EngineInstaller:
     def check_requirements(self) -> None:
         if not is_7z_installed():
             raise RuntimeError("7-Zip is not installed or not found in PATH. Please install 7-Zip to proceed.")
+
+        if self.project.is_native_project:
+            raise RuntimeError("A native project should be in the same folder than its engine")
 
     def get_project_platforms(self) -> List[str]:
         platforms: str = self.config["EngineUpdate.TurnKey"]["Platforms"]

@@ -11,6 +11,13 @@ from ..tools.helpers import get_engine_root_folder_from_env_var, is_engine_from_
 from ..tools.winreg import get_registry_value
 
 
+def resolve_engine_from_native_project(project: Project) -> Optional[Path]:
+    if project.is_native_project:
+        return project.root_folder.parent
+
+    return None
+
+
 def resolve_engine_from_env_var(project: Project) -> Optional[Path]:
     return get_engine_root_folder_from_env_var(project.engine_association)
 
@@ -86,6 +93,7 @@ def resolve_engine_from_path(project: Project) -> Optional[Path]:
 
 def resolve_engine_path(project: Project) -> Path:
     resolvers = [
+        resolve_engine_from_native_project,
         resolve_engine_from_registry,
         resolve_engine_from_egs,
         resolve_engine_from_path,
