@@ -44,7 +44,8 @@ dependencies = [
   "urllib3",
   "invoke",
   "types-invoke",
-  "GameDevTools"
+  "GameDevTools",
+  "blake3"
 ]
 
 urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
