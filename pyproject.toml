@@ -164,3 +164,6 @@ name = "Changed"
 
 [[tool.towncrier.type]]
 name = "Fixed"
+
+[tool.uv.sources]
+GameDevTools = { path = "D:\\Projects\\PyGameDevTools", editable = true }
