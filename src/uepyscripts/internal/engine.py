@@ -14,7 +14,8 @@ class Engine:
     class Runner:
         def __init__(self, path: Path, capture_output: bool, wait_process: bool = True, extra_args: list[str] = []) -> None:
             if not path.exists():
-                raise FileNotFoundError(f"The file {path} does not exist")
+                logger.warning(f"The file {path} does not exist")
+                return
 
             self.path = path.resolve()
             self.capture_output = capture_output
