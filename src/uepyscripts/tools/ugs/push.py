@@ -205,7 +205,6 @@ def build_zip(files_root_dir: Path, paths: list[str], output_dir: Path) -> Path:
 
     list_file = output_dir / f"{uuid.uuid4().hex}-files.txt"
     list_file.write_text("\n".join(paths), encoding="utf-8")
-    logger.info(f"Wrote file list at : {list_file}")
 
     start_time = time.perf_counter()
     logger.info(f"Start zipping {len(paths)} files")
