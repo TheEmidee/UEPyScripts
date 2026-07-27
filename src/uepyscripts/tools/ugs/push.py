@@ -91,7 +91,7 @@ class Context:
             secret_key=args.s3_secret_key,
             region=args.s3_bucket_region,
         )
-        self.upload_pdbs = not args.no_symbol_store_upload
+        self.upload_pdbs = not args.disable_symbol_store_upload
         self.symbol_store_path: str = args.symbol_store_path
         self.tmp_root: Path = Path(tempfile.mkdtemp(prefix="publish-"))
         self.hash_cache = HashCache()
@@ -413,7 +413,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
     parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
     parser.add_argument("--s3-secret-key", type=str, help=("AWS S3 Secret Key"))
-    parser.add_argument("--no-symbol-store-upload", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--disable-symbol-store-upload", action=argparse.BooleanOptionalAction)
     parser.add_argument("--symbol-store-path", type=str, help=("Path of the shared symbol store folder"))
     parser.add_argument(
         "--checkpoint_interval",
