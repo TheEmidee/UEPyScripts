@@ -144,14 +144,18 @@ def apply_delta(context: Context, version: str, local_manifest: Manifest) -> Man
     return manifest["files"]
 
 
-def resolve_target_version(index: list[str], ancestry: list[str]) -> str | None:
+def resolve_target_version(index: list[str], ancestry: list[str]) -> tuple[str | None, bool]:
     """Finds the nearest ancestor SHA (including HEAD itself) present in the
     index. Returns None if nothing has ever been published reachable from HEAD."""
     index_set = set(index)
     for sha in ancestry:
         if sha in index_set:
-            return sha
-    return None
+            return sha, True
+
+    if index:
+        return index[-1], False
+
+    return None, True
 
 
 def sync(context: Context, target_version: str, state: LocalState) -> LocalState:
@@ -239,11 +243,19 @@ def main() -> None:
 
     index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
     ancestry = get_local_ancestry()
-    target_version = resolve_target_version(index, ancestry)
+    target_version, is_exact_match = resolve_target_version(index, ancestry)
 
     if target_version is None:
         logger.info("No published version found in HEAD's ancestry — nothing to sync.")
         return
+
+    if not is_exact_match:
+        logger.warning(
+            f"No commit in HEAD's ancestry matches a published version — this usually means "
+            f"history was rewritten on the published branch (a force-push). Falling back to "
+            f"the latest published version ({target_version[:8]}), which may not exactly "
+            f"match your current source. You may need a local rebuild."
+        )
 
     local_state = LocalStateManager()
     local_state.data = sync(context, target_version, local_state.data)

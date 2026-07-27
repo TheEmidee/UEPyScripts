@@ -360,7 +360,8 @@ wheels = [
 
 [[package]]
 name = "gamedevtools"
-source = { editable = "../PyGameDevTools" }
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["s3"] },
@@ -370,32 +371,9 @@ dependencies = [
     { name = "types-invoke" },
     { name = "types-tqdm" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "boto3" },
-    { name = "boto3-stubs", extras = ["s3"] },
-    { name = "botocore" },
-    { name = "build", marker = "extra == 'dev'" },
-    { name = "build", marker = "extra == 'dist'" },
-    { name = "hatchling", marker = "extra == 'dev'" },
-    { name = "hatchling", marker = "extra == 'dist'" },
-    { name = "invoke" },
-    { name = "mypy", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'lint'" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'lint'" },
-    { name = "towncrier", marker = "extra == 'dev'" },
-    { name = "towncrier", marker = "extra == 'dist'" },
-    { name = "tqdm" },
-    { name = "twine", marker = "extra == 'dev'" },
-    { name = "twine", marker = "extra == 'dist'" },
-    { name = "types-invoke" },
-    { name = "types-tqdm" },
-    { name = "wheel", marker = "extra == 'dev'" },
-    { name = "wheel", marker = "extra == 'dist'" },
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/21/9bad56a03f5f61ceb6fb5dad2415071bf09b49e94e7be2782756320163a0/gamedevtools-1.2.0-py3-none-any.whl", hash = "sha256:0317438a3dac62032edab06d69f5878835f04b7386331f25ca3fc4d8aa24d56a", size = 13806, upload-time = "2026-07-27T19:08:23.405Z" },
 ]
-provides-extras = ["dev", "dist", "lint"]
 
 [[package]]
 name = "hatchling"
@@ -1391,7 +1369,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'" },
     { name = "build", marker = "extra == 'dist'" },
     { name = "colorama" },
-    { name = "gamedevtools", editable = "../PyGameDevTools" },
+    { name = "gamedevtools" },
     { name = "hatchling", marker = "extra == 'dev'" },
     { name = "hatchling", marker = "extra == 'dist'" },
     { name = "invoke" },
