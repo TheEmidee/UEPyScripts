@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from typing import TypedDict
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -28,7 +29,6 @@ from uepyscripts.internal.engine import resolve_engine
 from uepyscripts.internal.project import resolve_project
 
 # ---- CONFIG ----------------------------------------------------------
-COMMIT_INDEX_KEY = "commits-index.json"  # append-only: [{"sha": ..., "engine": ..., "game": ...}, ...]
 LOCAL_HASH_CACHE = ".hash-cache.json"
 
 # Extensions that go through the delta/checkpoint sync pipeline (no PDBs — see symstore below)
@@ -61,6 +61,12 @@ class HashCacheInfos:
     fingerprint: str
     hash: str
 
+Manifest = dict[str, str]
+
+class VersionManifest(TypedDict):
+    files: Manifest       # full state at this version: {relative_path: sha256}
+    changed: list[str]    # files added or modified since the previous version
+    removed: list[str]    # files removed since the previous version
 
 class HashCache:
     def __init__(self) -> None:
@@ -92,9 +98,11 @@ class Context:
             secret_key=args.s3_secret_key,
             region=args.s3_bucket_region,
         )
+        self.upload_pdbs = not args.no_symbol_store_upload
         self.symbol_store_path: str = args.symbol_store_path
         self.tmp_root: Path = Path(tempfile.mkdtemp(prefix="publish-"))
         self.hash_cache = HashCache()
+        self.current_sha = get_current_sha()
 
     def finalize(self) -> None:
         shutil.rmtree(self.tmp_root, ignore_errors=True)
@@ -241,7 +249,6 @@ def prune_old_versions(context: Context, cfg: RetentionConfiguration, index: lis
     keys_to_delete = []
     for v in versions_to_delete:
         keys_to_delete.append(f"{cfg.category}/manifests/{v}.json")
-        keys_to_delete.append(f"{cfg.category}/manifests/{v}.delta.json")
         keys_to_delete.append(f"{cfg.category}/deltas/{v}.7z")
     for v in checkpoints_to_delete:
         keys_to_delete.append(f"{cfg.category}/checkpoints/{v}.7z")
@@ -301,21 +308,28 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
 
     logger.info(f"=== Publish binary files for {cfg.category} ===")
 
-    logger.info("Scan file states")
-    # 1. Delta/checkpoint pipeline (no PDBs)
-    new_state = scan_by_ext(cfg, SYNC_EXT, context.hash_cache)
-    logger.info(f"Finished scan. Found {len(new_state)} files.")
-
     logger.info("Download index.json")
     index = context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/index.json", default=[])
 
+    if context.current_sha in index:
+        print(f"  {context} already published for this category, skipping "
+              f"(likely a CI re-run of an already-built commit)")
+        return context.current_sha
+
+    logger.info("Scan file states")
+    new_state = scan_by_ext(cfg, SYNC_EXT, context.hash_cache)
+    logger.info(f"Finished scan. Found {len(new_state)} files.")
+
     logger.info("Download JSON with old state")
-    old_state = context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/manifests/{index[-1]}.json") if index else {}
+    old_state = (
+        context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/manifests/{index[-1]}.json") 
+        if index else {}
+    )
 
     changed, removed = compute_diff(old_state, new_state)
     version = None
     if changed or removed:
-        version = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d.%H%M%S.%f")
+        version = context.current_sha
         logger.info(f"Publishing {version}: {len(changed)} changed, {len(removed)} removed")
 
         if changed:
@@ -326,17 +340,15 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
             context.s3_client.upload_file(context.s3_bucket_name, f"{cfg.category}/deltas/{version}.7z", zip_file_path)
             zip_file_path.unlink()
 
-        logger.info("Upload JSON with new state")
+        manifest_payload: VersionManifest = {
+            "files": new_state,
+            "changed": changed,
+            "removed": removed,
+        }
         context.s3_client.upload_bytes(
-            context.s3_bucket_name, f"{cfg.category}/manifests/{version}.json", json.dumps(new_state).encode(), content_type="application/json"
-        )
-
-        logger.info("Upload JSON with delta")
-        context.s3_client.upload_bytes(
-            context.s3_bucket_name,
-            f"{cfg.category}/manifests/{version}.delta.json",
-            json.dumps({"changed": changed, "removed": removed}).encode(),
-            content_type="application/json",
+            context.s3_bucket_name, 
+            f"{cfg.category}/manifests/{version}.json",
+            json.dumps(manifest_payload).encode(), content_type="application/json",
         )
 
         index.append(version)
@@ -382,7 +394,7 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
     prev_symstore_state = context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/symstore-manifest.json", default={})
     symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
 
-    if symstore_changed:
+    if symstore_changed and context.upload_pdbs:
         publish_to_symbol_store(context, symstore_changed, cfg)
 
         logger.info("Upload symstore-manifest.json")
@@ -424,6 +436,10 @@ def parse_arguments() -> argparse.Namespace:
         "--s3_secret_key",
         type=str,
         help=("AWS S3 Secret Key"),
+    )
+    parser.add_argument(
+        '--no_symbol_store_upload', 
+        action=argparse.BooleanOptionalAction
     )
     parser.add_argument(
         "--symbol_store_path",
@@ -468,16 +484,6 @@ def main() -> None:
 
         logger.info("Save hash cache")
         context.hash_cache.save()
-
-        sha = get_current_sha()
-        logger.info(f"Current SHA : {sha}")
-
-        logger.info("Update commit index")
-        commit_index = context.s3_client.download_json(context.s3_bucket_name, COMMIT_INDEX_KEY, default=[])
-        commit_index.append({"sha": sha, **versions})
-        context.s3_client.upload_bytes(context.s3_bucket_name, COMMIT_INDEX_KEY, json.dumps(commit_index).encode(), content_type="application/json")
-
-        logger.info(f"Recorded commit {sha[:8]} -> {versions}")
     finally:
         context.finalize()
 
