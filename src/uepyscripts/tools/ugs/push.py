@@ -1,6 +1,7 @@
 """
-Publishes engine/game binaries per category:
-  - DLL/EXE/LIB/.modules files go through the delta+checkpoint pipeline in S3
+Publishes engine + game binaries as a single unified stream:
+  - DLL/EXE/LIB/.modules files go through one delta+checkpoint pipeline in S3,
+    with paths relative to the common root shared by the engine and project folders
   - PDB/DLL/EXE files are additionally indexed into a Windows symbol store via symstore.exe
   - PDBs are NOT included in the delta/checkpoint pipeline (symbol store only)
   - Version resolution is keyed by git commit SHA (no git push required)
@@ -8,7 +9,6 @@ Publishes engine/game binaries per category:
 """
 
 import argparse
-import datetime
 import json
 import os
 import re
@@ -16,7 +16,6 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import TypedDict
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -27,6 +26,7 @@ from gamedevtools.s3 import S3Client
 from uepyscripts import logger
 from uepyscripts.internal.engine import resolve_engine
 from uepyscripts.internal.project import resolve_project
+from uepyscripts.tools.ugs.ugs_types import VersionManifest
 
 # ---- CONFIG ----------------------------------------------------------
 LOCAL_HASH_CACHE = ".hash-cache.json"
@@ -47,10 +47,9 @@ IGNORED_FILE_PATTERNS = [
 
 
 @dataclass
-class RetentionConfiguration:
-    category: str
-    root_folder: Path
-    directories: list[str]
+class FilesConfiguration:
+    root_folder: Path  # common ancestor of engine and project folders
+    directories: list[str]  # relative to root_folder, covers both engine and game dirs
     checkpoint_interval: int
     keep_checkpoints: int
     symstore_product: str
@@ -61,12 +60,6 @@ class HashCacheInfos:
     fingerprint: str
     hash: str
 
-Manifest = dict[str, str]
-
-class VersionManifest(TypedDict):
-    files: Manifest       # full state at this version: {relative_path: sha256}
-    changed: list[str]    # files added or modified since the previous version
-    removed: list[str]    # files removed since the previous version
 
 class HashCache:
     def __init__(self) -> None:
@@ -82,7 +75,7 @@ class HashCache:
         serializable = {path: asdict(entry) for path, entry in self.cache.items()}
         self.local_hash_cache.write_text(json.dumps(serializable))
 
-    def get(self, path: str) -> HashCacheInfos:
+    def get(self, path: str) -> HashCacheInfos | None:
         return self.cache.get(path)
 
     def set(self, path: str, infos: HashCacheInfos) -> None:
@@ -115,6 +108,19 @@ def get_current_sha() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 
+def compute_common_root(engine_root: Path, project_root: Path) -> Path:
+    """Finds the common ancestor of the engine and project folders, so every
+    file — whether from Engine/ or the game project — can be addressed by a
+    single relative path, and zip/extract share one consistent base."""
+    common = os.path.commonpath([str(engine_root.resolve()), str(project_root.resolve())])
+    return Path(common)
+
+
+def relative_dirs(base: Path, root: Path, subdirs: list[str]) -> list[str]:
+    """Turns a list of dirs relative to `base` into paths relative to `root`."""
+    return [(base / d).resolve().relative_to(root).as_posix() for d in subdirs]
+
+
 def hash_file(path: Path) -> str:
     # multithreaded=True lets blake3 use multiple threads internally for
     # large inputs (small files fall back to single-threaded automatically,
@@ -122,10 +128,10 @@ def hash_file(path: Path) -> str:
     return blake3.blake3(max_threads=blake3.blake3.AUTO).update_mmap(str(path)).hexdigest()
 
 
-def scan_by_ext(cfg: RetentionConfiguration, extensions: set[str], hash_cache: HashCache) -> dict[str, str]:
-    """Returns {relative_path: sha256}. Reuses cached hashes when mtime+size
-    haven't changed, so unchanged files (the vast majority on any given run)
-    are never re-read."""
+def scan_by_ext(cfg: FilesConfiguration, extensions: set[str], hash_cache: HashCache) -> dict[str, str]:
+    """Returns {relative_path: sha256}, paths relative to cfg.root_folder.
+    Reuses cached hashes when mtime+size haven't changed, so unchanged files
+    (the vast majority on any given run) are never re-read."""
     state: dict[str, str] = {}
     repo_root = cfg.root_folder
 
@@ -134,9 +140,7 @@ def scan_by_ext(cfg: RetentionConfiguration, extensions: set[str], hash_cache: H
         if not base.exists():
             continue
 
-        # os.walk allows modifying 'dirs' in-place to skip traversing ignored folders
         for root, dirs, files in os.walk(base):
-            # Prune ignored directory names instantly
             dirs[:] = [d_name for d_name in dirs if d_name not in IGNORED_FOLDERS]
 
             root_path = Path(root)
@@ -147,12 +151,10 @@ def scan_by_ext(cfg: RetentionConfiguration, extensions: set[str], hash_cache: H
                 if f.suffix.lower() not in extensions:
                     continue
 
-                # Skip file if ANY pattern matches the stem
                 if any(pattern.search(f.stem) for pattern in IGNORED_FILE_PATTERNS):
                     continue
 
                 rel = f.relative_to(repo_root).as_posix()
-                # Check if relative path parts match any ignored folder path
                 rel_parts = set(Path(rel).parts[:-1])
                 if rel_parts.intersection(IGNORED_FOLDERS):
                     continue
@@ -177,30 +179,31 @@ def compute_diff(old: dict[str, str], new: dict[str, str]) -> tuple[list[str], l
     return changed, removed
 
 
+def human_readable_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def human_readable_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, secs = divmod(seconds, 60)
+    return f"{int(minutes)}m {secs:.0f}s"
+
+
 def build_zip(files_root_dir: Path, paths: list[str], output_dir: Path) -> Path:
-    """Builds a .7z archive containing the given relative paths, preserving
-    their directory structure. Returns the path to the archive on disk
+    """Builds a .7z archive containing the given relative paths (relative to
+    files_root_dir — the common root — preserving whether they came from
+    Engine/ or the game project). Returns the path to the archive on disk
     (caller is responsible for cleaning it up)."""
-
-    def human_readable_size(num_bytes: int) -> str:
-        size = float(num_bytes)
-        for unit in ("B", "KB", "MB", "GB"):
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
-
-    def human_readable_duration(seconds: float) -> str:
-        if seconds < 60:
-            return f"{seconds:.1f}s"
-        minutes, secs = divmod(seconds, 60)
-        return f"{int(minutes)}m {secs:.0f}s"
-
     archive_path = output_dir / f"{uuid.uuid4().hex}.7z"
     logger.info(f"Destination : {archive_path}")
 
     list_file = output_dir / f"{uuid.uuid4().hex}-files.txt"
-    # write the list of all the files to zip together
     list_file.write_text("\n".join(paths), encoding="utf-8")
     logger.info(f"Wrote file list at : {list_file}")
 
@@ -227,17 +230,16 @@ def build_zip(files_root_dir: Path, paths: list[str], output_dir: Path) -> Path:
     return archive_path
 
 
-def prune_old_versions(context: Context, cfg: RetentionConfiguration, index: list[str], checkpoints: list[str]) -> tuple[list[str], list[str]]:
-    logger.info(
-        f"Try to prune old versions. Current number of checkpoint : {len(checkpoints)}. Number of checkpoint to keep : {cfg.keep_checkpoints}"
-    )
+def prune_old_versions(context: Context, cfg: FilesConfiguration, index: list[str], checkpoints: list[str]) -> tuple[list[str], list[str]]:
+    cfg_keep = cfg.keep_checkpoints
+    logger.info(f"Try to prune old versions. Current number of checkpoints: {len(checkpoints)}. Keep: {cfg_keep}")
 
-    if len(checkpoints) <= cfg.keep_checkpoints:
+    if len(checkpoints) <= cfg_keep:
         logger.info("There are not enough checkpoints to do anything")
         return index, checkpoints
 
-    checkpoints_to_keep = checkpoints[-cfg.keep_checkpoints :]
-    checkpoints_to_delete = checkpoints[: -cfg.keep_checkpoints]
+    checkpoints_to_keep = checkpoints[-cfg_keep:]
+    checkpoints_to_delete = checkpoints[:-cfg_keep]
     oldest_kept_version = checkpoints_to_keep[0]
     cutoff_idx = index.index(oldest_kept_version)
     versions_to_delete = index[:cutoff_idx]
@@ -248,10 +250,10 @@ def prune_old_versions(context: Context, cfg: RetentionConfiguration, index: lis
 
     keys_to_delete = []
     for v in versions_to_delete:
-        keys_to_delete.append(f"{cfg.category}/manifests/{v}.json")
-        keys_to_delete.append(f"{cfg.category}/deltas/{v}.7z")
+        keys_to_delete.append(f"manifests/{v}.json")
+        keys_to_delete.append(f"deltas/{v}.7z")
     for v in checkpoints_to_delete:
-        keys_to_delete.append(f"{cfg.category}/checkpoints/{v}.7z")
+        keys_to_delete.append(f"checkpoints/{v}.7z")
 
     logger.info(f"Pruning {len(versions_to_delete)} version(s), {len(checkpoints_to_delete)} checkpoint(s)")
     context.s3_client.delete_keys(context.s3_bucket_name, keys_to_delete)
@@ -259,7 +261,7 @@ def prune_old_versions(context: Context, cfg: RetentionConfiguration, index: lis
     return index[cutoff_idx:], checkpoints_to_keep
 
 
-def publish_to_symbol_store(context: Context, paths: list[str], cfg: RetentionConfiguration) -> None:
+def publish_to_symbol_store(context: Context, paths: list[str], cfg: FilesConfiguration) -> None:
     """Indexes PDB/DLL/EXE files into the symbol store via symstore.exe."""
     logger.info("Publish to symbol store")
 
@@ -272,7 +274,6 @@ def publish_to_symbol_store(context: Context, paths: list[str], cfg: RetentionCo
     root = cfg.root_folder
 
     list_file = context.tmp_root / f"{uuid.uuid4().hex}-symstore-files.txt"
-    # symstore's /f needs absolute paths, one per line
     list_file.write_text(
         "\n".join(str((root / p).resolve()) for p in paths),
         encoding="utf-8",
@@ -302,29 +303,26 @@ def publish_to_symbol_store(context: Context, paths: list[str], cfg: RetentionCo
     logger.info(f"Symbol store updated for {cfg.symstore_product}")
 
 
-def publish_category(context: Context, cfg: RetentionConfiguration) -> str | None:
-    """Publishes one category's binaries. Returns the new version string, or the
-    last-published version if nothing changed (so the commit index still gets an entry)."""
+def publish(context: Context, cfg: FilesConfiguration) -> str | None:
+    """Publishes the combined engine+game binaries as one version. Returns
+    the new version string, or the last-published version if nothing changed."""
 
-    logger.info(f"=== Publish binary files for {cfg.category} ===")
+    logger.info("=== Publish binary files ===")
 
     logger.info("Download index.json")
-    index = context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/index.json", default=[])
+    index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
 
     if context.current_sha in index:
-        print(f"  {context} already published for this category, skipping "
-              f"(likely a CI re-run of an already-built commit)")
+        logger.info(f"{context.current_sha} already published, skipping (likely a CI re-run of an already-built commit)")
+        logger.info("=== Finished processing binary files ===")
         return context.current_sha
 
-    logger.info("Scan file states")
+    logger.info("Scan file states (engine + game combined)")
     new_state = scan_by_ext(cfg, SYNC_EXT, context.hash_cache)
     logger.info(f"Finished scan. Found {len(new_state)} files.")
 
     logger.info("Download JSON with old state")
-    old_state = (
-        context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/manifests/{index[-1]}.json") 
-        if index else {}
-    )
+    old_state = context.s3_client.download_json(context.s3_bucket_name, f"manifests/{index[-1]}.json")["files"] if index else {}
 
     changed, removed = compute_diff(old_state, new_state)
     version = None
@@ -337,7 +335,7 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
             zip_file_path = build_zip(cfg.root_folder, changed, context.tmp_root)
 
             logger.info("Upload zip")
-            context.s3_client.upload_file(context.s3_bucket_name, f"{cfg.category}/deltas/{version}.7z", zip_file_path)
+            context.s3_client.upload_file(context.s3_bucket_name, f"deltas/{version}.7z", zip_file_path)
             zip_file_path.unlink()
 
         manifest_payload: VersionManifest = {
@@ -346,25 +344,25 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
             "removed": removed,
         }
         context.s3_client.upload_bytes(
-            context.s3_bucket_name, 
-            f"{cfg.category}/manifests/{version}.json",
-            json.dumps(manifest_payload).encode(), content_type="application/json",
+            context.s3_bucket_name,
+            f"manifests/{version}.json",
+            json.dumps(manifest_payload).encode(),
+            content_type="application/json",
         )
 
         index.append(version)
 
         logger.info("Download JSON with checkpoints")
-        checkpoints = context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/checkpoints.json", default=[])
+        checkpoints = context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[])
 
         logger.info(f"Checkpoint interval: {cfg.checkpoint_interval} - Number of deltas : {len(index)}")
 
         if len(index) % cfg.checkpoint_interval == 0:
             logger.info(f"Need to create a new checkpoint at version #{len(index)}")
-            logger.info("Build zip for the checkpoint")
             zip_file_path = build_zip(cfg.root_folder, list(new_state.keys()), context.tmp_root)
 
             logger.info("Upload zip")
-            context.s3_client.upload_file(context.s3_bucket_name, f"{cfg.category}/checkpoints/{version}.7z", zip_file_path)
+            context.s3_client.upload_file(context.s3_bucket_name, f"checkpoints/{version}.7z", zip_file_path)
             zip_file_path.unlink()
             checkpoints.append(version)
         else:
@@ -373,38 +371,36 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
         index, checkpoints = prune_old_versions(context, cfg, index, checkpoints)
 
         logger.info("Upload index.json")
-        context.s3_client.upload_bytes(
-            context.s3_bucket_name, f"{cfg.category}/index.json", json.dumps(index).encode(), content_type="application/json"
-        )
+        context.s3_client.upload_bytes(context.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
 
         logger.info("Upload checkpoints.json")
-        context.s3_client.upload_bytes(
-            context.s3_bucket_name, f"{cfg.category}/checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json"
-        )
+        context.s3_client.upload_bytes(context.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json")
     else:
         logger.info("No changes in synced binaries.")
 
-    # 2. Symbol store publish (PDB/DLL/EXE), independent of whether the sync pipeline changed —
-    #    diffed separately since PDBs aren't tracked in new_state above.
-    logger.info("Scan file states for debug files")
-    symstore_state = scan_by_ext(cfg, SYMSTORE_EXT, context.hash_cache)
-    logger.info(f"Finished scan. Found {len(symstore_state)} files.")
+    if context.upload_pdbs:
+        # Symbol store publish (PDB/DLL/EXE), independent of whether the sync pipeline changed
+        logger.info("Scan file states for debug files")
+        symstore_state = scan_by_ext(cfg, SYMSTORE_EXT, context.hash_cache)
+        logger.info(f"Finished scan. Found {len(symstore_state)} files.")
 
-    logger.info("Download symstore-manifest.json")
-    prev_symstore_state = context.s3_client.download_json(context.s3_bucket_name, f"{cfg.category}/symstore-manifest.json", default={})
-    symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
+        logger.info("Download symstore-manifest.json")
+        prev_symstore_state = context.s3_client.download_json(context.s3_bucket_name, "symstore-manifest.json", default={})
+        symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
 
-    if symstore_changed and context.upload_pdbs:
-        publish_to_symbol_store(context, symstore_changed, cfg)
+        if symstore_changed:
+            publish_to_symbol_store(context, symstore_changed, cfg)
 
-        logger.info("Upload symstore-manifest.json")
-        context.s3_client.upload_bytes(
-            context.s3_bucket_name, f"{cfg.category}/symstore-manifest.json", json.dumps(symstore_state).encode(), content_type="application/json"
-        )
+            logger.info("Upload symstore-manifest.json")
+            context.s3_client.upload_bytes(
+                context.s3_bucket_name, "symstore-manifest.json", json.dumps(symstore_state).encode(), content_type="application/json"
+            )
+        else:
+            logger.info("No changes for symbol store")
     else:
-        logger.info("No changes for symbol store")
+        logger.info("Upload on the symbol store is disabled")
 
-    logger.info(f"=== Finished processing binary files for {cfg.category} ===")
+    logger.info("=== Finished processing binary files ===")
 
     return version or (index[-1] if index else None)
 
@@ -412,39 +408,24 @@ def publish_category(context: Context, cfg: RetentionConfiguration) -> str | Non
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
+    parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
+    parser.add_argument("--s3-bucket-name", type=str, help=("AWS S3 Bucket Name"))
+    parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
+    parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
+    parser.add_argument("--s3-secret-key", type=str, help=("AWS S3 Secret Key"))
+    parser.add_argument("--no-symbol-store-upload", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--symbol-store-path", type=str, help=("Path of the shared symbol store folder"))
     parser.add_argument(
-        "--uproject_path",
-        type=Path,
-        help=("Path to a native uproject file"),
+        "--checkpoint_interval",
+        type=int,
+        default=20,
+        help="Publish a full checkpoint every N versions (default: 20)",
     )
     parser.add_argument(
-        "--s3_bucket_name",
-        type=str,
-        help=("AWS S3 Bucket Name"),
-    )
-    parser.add_argument(
-        "--s3_bucket_region",
-        type=str,
-        help=("AWS S3 Bucket Region"),
-    )
-    parser.add_argument(
-        "--s3_access_key",
-        type=str,
-        help=("AWS S3 Access Key"),
-    )
-    parser.add_argument(
-        "--s3_secret_key",
-        type=str,
-        help=("AWS S3 Secret Key"),
-    )
-    parser.add_argument(
-        '--no_symbol_store_upload', 
-        action=argparse.BooleanOptionalAction
-    )
-    parser.add_argument(
-        "--symbol_store_path",
-        type=str,
-        help=("Path of the shared symbol store folder"),
+        "--keep_checkpoints",
+        type=int,
+        default=2,
+        help="Number of checkpoints to retain; older ones (and their deltas) get pruned (default: 2)",
     )
 
     return parser.parse_args()
@@ -466,21 +447,21 @@ def main() -> None:
         exit(1)
 
     engine = resolve_engine(project)
+    directories = relative_dirs(engine.root_path, engine.root_path, ["Engine/Binaries/Win64", "Engine/Plugins"])
+    directories += relative_dirs(project.root_folder, engine.root_path, ["Binaries/Win64", "Plugins"])
+
+    cfg = FilesConfiguration(
+        root_folder=engine.root_path,
+        directories=directories,
+        checkpoint_interval=args.checkpoint_interval,
+        keep_checkpoints=args.keep_checkpoints,
+        symstore_product=project.project_name,
+    )
 
     context = Context(args)
 
     try:
-        versions = {
-            "engine": publish_category(
-                context,
-                RetentionConfiguration(
-                    "engine", engine.root_path, ["Engine/Binaries/Win64", "Engine/Plugins"], 30, 2, f"{project.project_name}-Engine"
-                ),
-            ),
-            "game": publish_category(
-                context, RetentionConfiguration("game", project.root_folder, ["Binaries/Win64", "Plugins"], 10, 3, f"{project.project_name}-Game")
-            ),
-        }
+        publish(context, cfg)
 
         logger.info("Save hash cache")
         context.hash_cache.save()

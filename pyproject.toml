@@ -92,7 +92,7 @@ fixable = ["ALL"]
 convention = "google"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 warn_return_any = true
 disallow_untyped_defs = true
 
@@ -132,8 +132,8 @@ ue-generate-solution = "uepyscripts.tools.ue.generate_solution:main"
 ue-close-editor = "uepyscripts.tools.ue.close_editor:main"
 ue-compile-editor = "uepyscripts.tools.ue.compile_editor:main"
 ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
-ue-binaries-push = "uepyscripts.tools.ue.push_binaries:main"
-ue-binaries-pull = "uepyscripts.tools.ue.pull_binaries:main"
+ue-ugs-push = "uepyscripts.tools.ugs.push:main"
+ue-ugs-pull = "uepyscripts.tools.ugs.pull:main"
 ue-ci-cleanup = "uepyscripts.tools.ci.cleanup:main"
 ue-ci-run-buildgraph = "uepyscripts.tools.ci.buildgraph:main"
 
@@ -164,6 +164,3 @@ name = "Changed"
 
 [[tool.towncrier.type]]
 name = "Fixed"
-
-[tool.uv.sources]
-GameDevTools = { path = "D:\\Projects\\PyGameDevTools", editable = true }

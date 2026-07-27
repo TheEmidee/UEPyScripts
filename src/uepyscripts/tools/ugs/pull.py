@@ -1,0 +1,254 @@
+import argparse
+import json
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import TypedDict
+
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from gamedevtools.s3 import S3Client
+
+from uepyscripts import logger
+from uepyscripts.internal.engine import resolve_engine
+from uepyscripts.internal.project import resolve_project
+from uepyscripts.tools.ugs.ugs_types import Manifest, VersionManifest
+
+"""
+Syncs local engine + game binaries to match the current git HEAD (or nearest
+published ancestor commit), as a single unified stream (no engine/game split).
+
+  - index.json (a list of commit SHAs that have a publish) doubles as the
+    record of "which commits have a publish" — resolution walks HEAD's
+    ancestry and finds the nearest SHA present in it.
+  - Jumps to the newest applicable checkpoint (full state) if one exists
+    between the client's current version and the target, then replays any
+    remaining deltas on top.
+  - Every archive is extracted relative to the common root shared by the
+    engine and project folders, so paths land correctly whether they
+    originated from Engine/ or the game project.
+  - PDB files are never downloaded here — they're excluded from the
+    delta/checkpoint pipeline entirely and served on-demand via the
+    symbol store instead. Configure your debugger's symbol path separately.
+
+Requires 7z.exe on PATH (or set SEVEN_ZIP_PATH below).
+"""
+
+# ---- CONFIG ----------------------------------------------------------
+LOCAL_STATE_FILE = ".sync-state.json"  # {"version": ..., "manifest": {...}}
+ANCESTRY_LOOKBACK = 2000
+
+
+class LocalState(TypedDict):
+    version: str | None
+    manifest: dict[str, str]
+
+
+class Context:
+    def __init__(self, root_folder: Path, args: argparse.Namespace) -> None:
+        self.root_folder: Path = root_folder
+        self.s3_bucket_name: str = args.s3_bucket_name
+        self.s3_bucket_region: str = args.s3_bucket_region
+        self.s3_client: S3Client = S3Client(
+            access_key=args.s3_access_key,
+            secret_key=args.s3_secret_key,
+            region=args.s3_bucket_region,
+        )
+
+
+class LocalStateManager:
+    def __init__(self) -> None:
+        self.path = Path(LOCAL_STATE_FILE)
+        self.data: LocalState = LocalState(version=None, manifest={})
+
+        if self.path.exists():
+            self.data = json.loads(self.path.read_text())
+
+    def save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self.data, indent=2))
+
+
+def get_local_ancestry(limit: int = ANCESTRY_LOOKBACK) -> list[str]:
+    out = subprocess.check_output(["git", "log", f"-{limit}", "--format=%H", "HEAD"], text=True)
+    return out.splitlines()
+
+
+def download_and_extract_archive(context: Context, s3_file_path: str) -> None:
+    """Downloads and extracts a .7z archive into the context root folder
+    — so relative paths for both engine and game files land correctly."""
+    archive_bytes = context.s3_client.download_bytes(context.s3_bucket_name, s3_file_path)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive_path = Path(tmpdir) / "archive.7z"
+        archive_path.write_bytes(archive_bytes)
+
+        result = subprocess.run(
+            [r"C:\Program Files\7-Zip\7z.exe", "x", str(archive_path), f"-o{context.root_folder}", "-y"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"7z extraction failed:\n{result.stdout}\n{result.stderr}")
+
+
+def warn_if_source_dirty() -> None:
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--", "Engine/Source"],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip():
+        logger.warning(
+            "You have uncommitted changes under Engine/Source (or the game project's "
+            "Source folder). Synced binaries reflect the last committed state only — "
+            "you'll likely need to rebuild before your local changes take effect."
+        )
+
+
+def apply_checkpoint(context: Context, version: str, old_manifest: Manifest) -> Manifest:
+    logger.info(f"Jumping to checkpoint {version} (full state)...")
+
+    download_and_extract_archive(context, f"checkpoints/{version}.7z")
+
+    manifest: VersionManifest = context.s3_client.download_json(context.s3_bucket_name, f"manifests/{version}.json")
+    new_manifest = manifest["files"]
+
+    stale = [p for p in old_manifest if p not in new_manifest]
+    for rel in stale:
+        p = context.root_folder / rel
+        if p.exists():
+            p.unlink()
+    if stale:
+        logger.info(f"Removed {len(stale)} stale files")
+
+    logger.info(f"Checkpoint applied: {len(new_manifest)} files total")
+    return new_manifest
+
+
+def apply_delta(context: Context, version: str, local_manifest: Manifest) -> Manifest:
+    manifest: VersionManifest = context.s3_client.download_json(context.s3_bucket_name, f"manifests/{version}.json")
+
+    if manifest["changed"]:
+        download_and_extract_archive(context, f"deltas/{version}.7z")
+        logger.info(f"Applied {len(manifest['changed'])} changed files")
+
+    if manifest["removed"]:
+        for rel in manifest["removed"]:
+            p = context.root_folder / rel
+            if p.exists():
+                p.unlink()
+            local_manifest.pop(rel, None)
+
+        logger.info(f"Removed {len(manifest['removed'])} stale files")
+
+    return manifest["files"]
+
+
+def resolve_target_version(index: list[str], ancestry: list[str]) -> str | None:
+    """Finds the nearest ancestor SHA (including HEAD itself) present in the
+    index. Returns None if nothing has ever been published reachable from HEAD."""
+    index_set = set(index)
+    for sha in ancestry:
+        if sha in index_set:
+            return sha
+    return None
+
+
+def sync(context: Context, target_version: str, state: LocalState) -> LocalState:
+    logger.info("=== Start syncing binaries ===")
+    if state.get("version") == target_version:
+        logger.info(f"Already up to date ({target_version})")
+        logger.info("=== Finished syncing. ===")
+        return state
+
+    index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
+    try:
+        checkpoints = context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[])
+    except ClientError:
+        checkpoints = []
+
+    target_idx = index.index(target_version)
+
+    current_version = state.get("version")
+    start_idx: int
+    if current_version is None:
+        start_idx = 0
+    else:
+        if current_version not in index:
+            raise RuntimeError(
+                f"Local version {current_version} not found in remote index — "
+                f"history may have been pruned. Delete {LOCAL_STATE_FILE} to force a full resync."
+            )
+        start_idx = index.index(current_version) + 1
+
+    applicable_checkpoints = [v for v in checkpoints if v in index and start_idx <= index.index(v) <= target_idx]
+
+    manifest: Manifest = state.get("manifest", {})
+    resume_idx = start_idx
+
+    if applicable_checkpoints:
+        best_checkpoint = max(applicable_checkpoints, key=lambda v: index.index(v))
+        manifest = apply_checkpoint(context, best_checkpoint, manifest)
+        resume_idx = index.index(best_checkpoint) + 1
+
+    pending = index[resume_idx : target_idx + 1]
+
+    if not pending and not applicable_checkpoints:
+        logger.info("Nothing to apply")
+        return state
+
+    for version in pending:
+        logger.info(f"Syncing {version}...")
+        manifest = apply_delta(context, version, manifest)
+
+    logger.info(f"=== Finished syncing. Now at {target_version} ===")
+    return LocalState(version=target_version, manifest=manifest)
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
+    parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
+    parser.add_argument("--s3-bucket-name", type=str, help=("AWS S3 Bucket Name"))
+    parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
+    parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
+    parser.add_argument("--s3-secret-key", type=str, help=("AWS S3 Secret Key"))
+
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_arguments()
+
+    logger.info("Syncing binaries...")
+
+    try:
+        project = resolve_project(args.uproject_path)
+    except Exception as e:
+        logger.fatal(f"Project resolution failed: {e}")
+        exit(1)
+
+    if not project.is_native_project:
+        logger.fatal("You can only sync binaries for native projects")
+        exit(1)
+
+    engine = resolve_engine(project)
+    context = Context(engine.root_path, args)
+
+    warn_if_source_dirty()
+
+    index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
+    ancestry = get_local_ancestry()
+    target_version = resolve_target_version(index, ancestry)
+
+    if target_version is None:
+        logger.info("No published version found in HEAD's ancestry — nothing to sync.")
+        return
+
+    local_state = LocalStateManager()
+    local_state.data = sync(context, target_version, local_state.data)
+    local_state.save()
+
+
+if __name__ == "__main__":
+    main()
