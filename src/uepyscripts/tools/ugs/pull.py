@@ -1,7 +1,9 @@
 import argparse
 import json
+import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import TypedDict
 
@@ -89,6 +91,19 @@ def download_and_extract_archive(context: Context, s3_file_path: str) -> None:
         )
         if result.returncode != 0:
             raise RuntimeError(f"7z extraction failed:\n{result.stdout}\n{result.stderr}")
+
+        list_result = subprocess.run(
+            [r"C:\Program Files\7-Zip\7z.exe", "l", "-slt", str(archive_path)],
+            capture_output=True,
+            text=True,
+        )
+        now = time.time()
+        for line in list_result.stdout.splitlines():
+            if line.startswith("Path = "):
+                rel_path = line[len("Path = ") :].strip()
+                extracted_file = context.root_folder / rel_path
+                if extracted_file.is_file():
+                    os.utime(extracted_file, (now, now))
 
 
 def warn_if_source_dirty() -> None:
