@@ -1,9 +1,7 @@
 import argparse
 import json
-import os
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 from typing import TypedDict
 
@@ -55,6 +53,8 @@ class Context:
             secret_key=args.s3_secret_key,
             region=args.s3_bucket_region,
         )
+        logger.info("Download index.json")
+        self.commit_index = self.s3_client.download_json(self.s3_bucket_name, "index.json", default=[])
 
 
 class LocalStateManager:
@@ -78,12 +78,14 @@ def get_local_ancestry(limit: int = ANCESTRY_LOOKBACK) -> list[str]:
 def download_and_extract_archive(context: Context, s3_file_path: str) -> None:
     """Downloads and extracts a .7z archive into the context root folder
     — so relative paths for both engine and game files land correctly."""
+    logger.info(f"Download archive {s3_file_path}")
     archive_bytes = context.s3_client.download_bytes(context.s3_bucket_name, s3_file_path)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         archive_path = Path(tmpdir) / "archive.7z"
         archive_path.write_bytes(archive_bytes)
 
+        logger.info(f"Extract archive {s3_file_path}")
         result = subprocess.run(
             [r"C:\Program Files\7-Zip\7z.exe", "x", str(archive_path), f"-o{context.root_folder}", "-y"],
             capture_output=True,
@@ -92,18 +94,20 @@ def download_and_extract_archive(context: Context, s3_file_path: str) -> None:
         if result.returncode != 0:
             raise RuntimeError(f"7z extraction failed:\n{result.stdout}\n{result.stderr}")
 
-        list_result = subprocess.run(
-            [r"C:\Program Files\7-Zip\7z.exe", "l", "-slt", str(archive_path)],
-            capture_output=True,
-            text=True,
-        )
-        now = time.time()
-        for line in list_result.stdout.splitlines():
-            if line.startswith("Path = "):
-                rel_path = line[len("Path = ") :].strip()
-                extracted_file = context.root_folder / rel_path
-                if extracted_file.is_file():
-                    os.utime(extracted_file, (now, now))
+        logger.info("Extraction done...")
+
+        # list_result = subprocess.run(
+        #     [r"C:\Program Files\7-Zip\7z.exe", "l", "-slt", str(archive_path)],
+        #     capture_output=True,
+        #     text=True,
+        # )
+        # now = time.time()
+        # for line in list_result.stdout.splitlines():
+        #     if line.startswith("Path = "):
+        #         rel_path = line[len("Path = ") :].strip()
+        #         extracted_file = context.root_folder / rel_path
+        #         if extracted_file.is_file():
+        #             os.utime(extracted_file, (now, now))
 
 
 def warn_if_source_dirty() -> None:
@@ -121,7 +125,7 @@ def warn_if_source_dirty() -> None:
 
 
 def apply_checkpoint(context: Context, version: str, old_manifest: Manifest) -> Manifest:
-    logger.info(f"Jumping to checkpoint {version} (full state)...")
+    logger.info(f"Apply checkpoint {version} (full state)...")
 
     download_and_extract_archive(context, f"checkpoints/{version}.7z")
 
@@ -175,49 +179,45 @@ def resolve_target_version(index: list[str], ancestry: list[str]) -> tuple[str |
 
 def sync(context: Context, target_version: str, state: LocalState) -> LocalState:
     logger.info("=== Start syncing binaries ===")
-    if state.get("version") == target_version:
-        logger.info(f"Already up to date ({target_version})")
-        logger.info("=== Finished syncing. ===")
-        return state
 
-    index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
-    try:
-        checkpoints = context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[])
-    except ClientError:
-        checkpoints = []
-
-    target_idx = index.index(target_version)
+    target_idx: int = context.commit_index.index(target_version)
 
     current_version = state.get("version")
     start_idx: int
     if current_version is None:
         start_idx = 0
     else:
-        if current_version not in index:
-            raise RuntimeError(
-                f"Local version {current_version} not found in remote index — "
-                f"history may have been pruned. Delete {LOCAL_STATE_FILE} to force a full resync."
-            )
-        start_idx = index.index(current_version) + 1
+        start_idx = context.commit_index.index(current_version) + 1
 
-    applicable_checkpoints = [v for v in checkpoints if v in index and start_idx <= index.index(v) <= target_idx]
+    try:
+        logger.info("Download checkpoints")
+        checkpoints = context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[])
+    except ClientError:
+        checkpoints = []
+
+    applicable_checkpoints = [v for v in checkpoints if v in context.commit_index and start_idx <= context.commit_index.index(v) <= target_idx]
 
     manifest: Manifest = state.get("manifest", {})
     resume_idx = start_idx
 
     if applicable_checkpoints:
-        best_checkpoint = max(applicable_checkpoints, key=lambda v: index.index(v))
+        best_checkpoint = max(applicable_checkpoints, key=lambda v: context.commit_index.index(v))
         manifest = apply_checkpoint(context, best_checkpoint, manifest)
-        resume_idx = index.index(best_checkpoint) + 1
+        resume_idx = context.commit_index.index(best_checkpoint) + 1
+    else:
+        logger.info("No checkpoint to apply")
 
-    pending = index[resume_idx : target_idx + 1]
+    pending = context.commit_index[resume_idx : target_idx + 1]
 
     if not pending and not applicable_checkpoints:
-        logger.info("Nothing to apply")
+        logger.info("No delta to apply")
         return state
 
-    for version in pending:
-        logger.info(f"Syncing {version}...")
+    num_delta: int = len(pending)
+    logger.info(f"Need to apply {num_delta} deltas")
+
+    for index, version in enumerate(pending, start=1):
+        logger.info(f"Apply delta {index} / {num_delta} : {version}")
         manifest = apply_delta(context, version, manifest)
 
     logger.info(f"=== Finished syncing. Now at {target_version} ===")
@@ -252,17 +252,34 @@ def main() -> None:
         exit(1)
 
     engine = resolve_engine(project)
+
+    local_state = LocalStateManager()
+
     context = Context(engine.root_path, args)
 
     warn_if_source_dirty()
 
-    index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
     ancestry = get_local_ancestry()
-    target_version, is_exact_match = resolve_target_version(index, ancestry)
+    target_version, is_exact_match = resolve_target_version(context.commit_index, ancestry)
 
     if target_version is None:
         logger.info("No published version found in HEAD's ancestry — nothing to sync.")
         return
+
+    current_version = local_state.data.get("version")
+
+    if current_version:
+        if current_version not in context.commit_index:
+            raise RuntimeError(
+                f"Local version {current_version} not found in remote index — "
+                f"history may have been pruned. Delete {LOCAL_STATE_FILE} to force a full resync."
+            )
+
+        if current_version == target_version:
+            logger.info(f"Already up to date ({target_version})")
+            return
+
+    logger.info(f"Will sync up to {target_version}")
 
     if not is_exact_match:
         logger.warning(
@@ -272,7 +289,6 @@ def main() -> None:
             f"match your current source. You may need a local rebuild."
         )
 
-    local_state = LocalStateManager()
     local_state.data = sync(context, target_version, local_state.data)
     local_state.save()
 
