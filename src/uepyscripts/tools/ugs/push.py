@@ -1,7 +1,8 @@
 """
 Publishes engine + game binaries as a single unified stream:
-  - DLL/EXE/LIB/.modules files go through one delta+checkpoint pipeline in S3,
-    with paths relative to the common root shared by the engine and project folders
+  - DLL/EXE/LIB/.modules/.target files (plus any configured glob patterns)
+    go through one delta+checkpoint pipeline in S3, with paths relative to
+    the common root shared by the engine and project folders
   - PDB/DLL/EXE files are additionally indexed into a Windows symbol store via symstore.exe
   - PDBs are NOT included in the delta/checkpoint pipeline (symbol store only)
   - Version resolution is keyed by git commit SHA (no git push required)
@@ -32,7 +33,7 @@ from uepyscripts.tools.ugs.ugs_types import VersionManifest
 LOCAL_HASH_CACHE = ".hash-cache.json"
 
 # Extensions that go through the delta/checkpoint sync pipeline (no PDBs — see symstore below)
-SYNC_EXT = {".dll", ".exe", ".lib", ".modules"}
+SYNC_EXT = {".dll", ".exe", ".lib", ".modules", ".target"}
 
 # Extensions indexed into the symbol store (PDBs are the whole point, DLL/EXE ride along
 # so minidump/remote-debug analysis can resolve both code and symbols from one place)
@@ -50,6 +51,7 @@ IGNORED_FILE_PATTERNS = [
 class FilesConfiguration:
     root_folder: Path  # common ancestor of engine and project folders
     directories: list[str]  # relative to root_folder, covers both engine and game dirs
+    glob_files: list[str]  # glob patterns relative to root_folder, e.g. "Engine/Intermediate/Build/BuildRules/*.json"
     checkpoint_interval: int
     keep_checkpoints: int
     symstore_product: str
@@ -84,21 +86,20 @@ class HashCache:
 
 class Context:
     def __init__(self, args: argparse.Namespace) -> None:
-        self.s3_bucket_name: str = args.s3_bucket_name
-        self.s3_bucket_region: str = args.s3_bucket_region
+        self.args = args
         self.s3_client: S3Client = S3Client(
             access_key=args.s3_access_key,
             secret_key=args.s3_secret_key,
             region=args.s3_bucket_region,
         )
-        self.upload_pdbs = not args.disable_symbol_store_upload
         self.symbol_store_path: str = args.symbol_store_path
         self.tmp_root: Path = Path(tempfile.mkdtemp(prefix="publish-"))
         self.hash_cache = HashCache()
         self.current_sha = get_current_sha()
 
     def finalize(self) -> None:
-        shutil.rmtree(self.tmp_root, ignore_errors=True)
+        if not self.args.keep_temp_directory:
+            shutil.rmtree(self.tmp_root, ignore_errors=True)
 
 
 def get_current_sha() -> str:
@@ -128,18 +129,62 @@ def hash_file(path: Path) -> str:
     return blake3.blake3(max_threads=blake3.blake3.AUTO).update_mmap(str(path)).hexdigest()
 
 
+def hash_with_cache(f: Path, rel: str, hash_cache: HashCache) -> str:
+    """Shared cache-or-hash logic used by both extension-based and
+    glob-based scanning, so both stay consistent and avoid re-reading
+    files whose mtime+size haven't changed."""
+    stat = f.stat()
+    fingerprint = f"{stat.st_mtime_ns}:{stat.st_size}"
+
+    cached = hash_cache.get(rel)
+    if cached and cached.fingerprint == fingerprint:
+        return cached.hash
+
+    file_hash = hash_file(f)
+    hash_cache.set(rel, HashCacheInfos(fingerprint, file_hash))
+    return file_hash
+
+
+def has_glob_chars(pattern: str) -> bool:
+    return any(ch in pattern for ch in "*?[")
+
+
+def expand_directories(root: Path, patterns: list[str]) -> list[Path]:
+    """Expands cfg.directories entries into actual directories to scan.
+    Plain paths (no wildcard characters) are treated as literal directories,
+    same as before. Patterns containing wildcards — including a trailing
+    '**' for 'this directory and every subdirectory, recursively' — are
+    resolved via Path.glob, which natively understands '**' as a recursive
+    directory match."""
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+
+    for pattern in patterns:
+        if has_glob_chars(pattern):
+            for match in root.glob(pattern):
+                if match.is_dir() and match not in seen:
+                    seen.add(match)
+                    dirs.append(match)
+        else:
+            d = root / pattern
+            if d.exists() and d not in seen:
+                seen.add(d)
+                dirs.append(d)
+
+    return dirs
+
+
 def scan_by_ext(cfg: FilesConfiguration, extensions: set[str], hash_cache: HashCache) -> dict[str, str]:
     """Returns {relative_path: sha256}, paths relative to cfg.root_folder.
-    Reuses cached hashes when mtime+size haven't changed, so unchanged files
-    (the vast majority on any given run) are never re-read."""
+    cfg.directories entries may be literal paths or glob patterns (including
+    a trailing '**' for recursive matching); each matched directory is then
+    walked for files matching `extensions`. Reuses cached hashes when
+    mtime+size haven't changed, so unchanged files (the vast majority on
+    any given run) are never re-read."""
     state: dict[str, str] = {}
     repo_root = cfg.root_folder
 
-    for d in cfg.directories:
-        base = repo_root / d
-        if not base.exists():
-            continue
-
+    for base in expand_directories(repo_root, cfg.directories):
         for root, dirs, files in os.walk(base):
             dirs[:] = [d_name for d_name in dirs if d_name not in IGNORED_FOLDERS]
 
@@ -155,21 +200,40 @@ def scan_by_ext(cfg: FilesConfiguration, extensions: set[str], hash_cache: HashC
                     continue
 
                 rel = f.relative_to(repo_root).as_posix()
-                rel_parts = set(Path(rel).parts[:-1])
-                if rel_parts.intersection(IGNORED_FOLDERS):
-                    continue
+                state[rel] = hash_with_cache(f, rel, hash_cache)
 
-                stat = f.stat()
-                fingerprint = f"{stat.st_mtime_ns}:{stat.st_size}"
+    return state
 
-                cached = hash_cache.get(rel)
-                if cached and cached.fingerprint == fingerprint:
-                    state[rel] = cached.hash
-                else:
-                    file_hash = hash_file(f)
-                    state[rel] = file_hash
-                    hash_cache.set(rel, HashCacheInfos(fingerprint, file_hash))
 
+def scan_by_glob(cfg: FilesConfiguration, hash_cache: HashCache) -> dict[str, str]:
+    """Returns {relative_path: sha256} for every file matching cfg.glob_files
+    (patterns relative to cfg.root_folder). Supports '**' for recursive
+    matching, e.g. 'Engine/Intermediate/Build/Win64/x64/**/*.generated.h'
+    matches that file anywhere under x64/, at any depth. Unlike scan_by_ext,
+    this is not filtered by IGNORED_FOLDERS — if a pattern matches a file,
+    it's included, since an explicit glob is an explicit request."""
+    state: dict[str, str] = {}
+    repo_root = cfg.root_folder
+
+    for pattern in cfg.glob_files:
+        for f in repo_root.glob(pattern):
+            if not f.is_file():
+                continue
+
+            if any(p.search(f.stem) for p in IGNORED_FILE_PATTERNS):
+                continue
+
+            rel = f.relative_to(repo_root).as_posix()
+            state[rel] = hash_with_cache(f, rel, hash_cache)
+
+    return state
+
+
+def scan_sync_files(cfg: FilesConfiguration, hash_cache: HashCache) -> dict[str, str]:
+    """Combined scan for the delta/checkpoint pipeline: extension-matched
+    files under cfg.directories, plus anything matched by cfg.glob_files."""
+    state = scan_by_ext(cfg, SYNC_EXT, hash_cache)
+    state.update(scan_by_glob(cfg, hash_cache))
     return state
 
 
@@ -255,7 +319,7 @@ def prune_old_versions(context: Context, cfg: FilesConfiguration, index: list[st
         keys_to_delete.append(f"checkpoints/{v}.7z")
 
     logger.info(f"Pruning {len(versions_to_delete)} version(s), {len(checkpoints_to_delete)} checkpoint(s)")
-    context.s3_client.delete_keys(context.s3_bucket_name, keys_to_delete)
+    context.s3_client.delete_keys(context.args.s3_bucket_name, keys_to_delete)
 
     return index[cutoff_idx:], checkpoints_to_keep
 
@@ -302,112 +366,16 @@ def publish_to_symbol_store(context: Context, paths: list[str], cfg: FilesConfig
     logger.info(f"Symbol store updated for {cfg.symstore_product}")
 
 
-def publish(context: Context, cfg: FilesConfiguration) -> str | None:
-    """Publishes the combined engine+game binaries as one version. Returns
-    the new version string, or the last-published version if nothing changed."""
-
-    logger.info("=== Publish binary files ===")
-
-    logger.info("Download index.json")
-    index = context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[])
-
-    if context.current_sha in index:
-        logger.info(f"{context.current_sha} already published, skipping (likely a CI re-run of an already-built commit)")
-        logger.info("=== Finished processing binary files ===")
-        return context.current_sha
-
-    logger.info("Scan file states (engine + game combined)")
-    new_state = scan_by_ext(cfg, SYNC_EXT, context.hash_cache)
-    logger.info(f"Finished scan. Found {len(new_state)} files.")
-
-    logger.info("Download JSON with old state")
-    old_state = context.s3_client.download_json(context.s3_bucket_name, f"manifests/{index[-1]}.json")["files"] if index else {}
-
-    changed, removed = compute_diff(old_state, new_state)
-    version = None
-    if changed or removed:
-        version = context.current_sha
-        logger.info(f"Publishing {version}: {len(changed)} changed, {len(removed)} removed")
-
-        if changed:
-            logger.info("Build zip of changed files")
-            zip_file_path = build_zip(cfg.root_folder, changed, context.tmp_root)
-
-            logger.info("Upload zip")
-            context.s3_client.upload_file(context.s3_bucket_name, f"deltas/{version}.7z", zip_file_path)
-            zip_file_path.unlink()
-
-        manifest_payload: VersionManifest = {
-            "files": new_state,
-            "changed": changed,
-            "removed": removed,
-        }
-        context.s3_client.upload_bytes(
-            context.s3_bucket_name,
-            f"manifests/{version}.json",
-            json.dumps(manifest_payload).encode(),
-            content_type="application/json",
-        )
-
-        index.append(version)
-
-        logger.info("Download JSON with checkpoints")
-        checkpoints = context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[])
-
-        logger.info(f"Checkpoint interval: {cfg.checkpoint_interval} - Number of deltas : {len(index)}")
-
-        if len(index) % cfg.checkpoint_interval == 0:
-            logger.info(f"Need to create a new checkpoint at version #{len(index)}")
-            zip_file_path = build_zip(cfg.root_folder, list(new_state.keys()), context.tmp_root)
-
-            logger.info("Upload zip")
-            context.s3_client.upload_file(context.s3_bucket_name, f"checkpoints/{version}.7z", zip_file_path)
-            zip_file_path.unlink()
-            checkpoints.append(version)
-        else:
-            logger.info("No need to create a new checkpoint")
-
-        index, checkpoints = prune_old_versions(context, cfg, index, checkpoints)
-
-        logger.info("Upload index.json")
-        context.s3_client.upload_bytes(context.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
-
-        logger.info("Upload checkpoints.json")
-        context.s3_client.upload_bytes(context.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json")
-    else:
-        logger.info("No changes in synced binaries.")
-
-    if context.upload_pdbs:
-        # Symbol store publish (PDB/DLL/EXE), independent of whether the sync pipeline changed
-        logger.info("Scan file states for debug files")
-        symstore_state = scan_by_ext(cfg, SYMSTORE_EXT, context.hash_cache)
-        logger.info(f"Finished scan. Found {len(symstore_state)} files.")
-
-        logger.info("Download symstore-manifest.json")
-        prev_symstore_state = context.s3_client.download_json(context.s3_bucket_name, "symstore-manifest.json", default={})
-        symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
-
-        if symstore_changed:
-            publish_to_symbol_store(context, symstore_changed, cfg)
-
-            logger.info("Upload symstore-manifest.json")
-            context.s3_client.upload_bytes(
-                context.s3_bucket_name, "symstore-manifest.json", json.dumps(symstore_state).encode(), content_type="application/json"
-            )
-        else:
-            logger.info("No changes for symbol store")
-    else:
-        logger.info("Upload on the symbol store is disabled")
-
-    logger.info("=== Finished processing binary files ===")
-
-    return version or (index[-1] if index else None)
-
-
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
     parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
+    parser.add_argument("--skip-upload", action=argparse.BooleanOptionalAction, help=("Set this to not upload anything on S3"))
+    parser.add_argument(
+        "--keep-temp-directory",
+        action=argparse.BooleanOptionalAction,
+        help=("Set this to not delete the temporary directory when the script finishes"),
+    )
     parser.add_argument("--s3-bucket-name", type=str, help=("AWS S3 Bucket Name"))
     parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
     parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
@@ -446,12 +414,12 @@ def main() -> None:
         exit(1)
 
     engine = resolve_engine(project)
-    directories = relative_dirs(engine.root_path, engine.root_path, ["Engine/Binaries/Win64", "Engine/Plugins"])
-    directories += relative_dirs(project.root_folder, engine.root_path, ["Binaries/Win64", "Plugins"])
+    # directories += relative_dirs(project.root_folder, engine.root_path, ["Binaries/Win64", "Plugins"])
 
     cfg = FilesConfiguration(
         root_folder=engine.root_path,
-        directories=directories,
+        directories=["Engine/Binaries/Win64", "Engine/Platforms", "Engine/Plugins", "Engine/Intermediate/Build/BuildRules", "Engine/Intermediate/Build/Win64/**/"],
+        glob_files=["Engine/Intermediate/Build/BuildRules/*.json", "Engine/Intermediate/Build/Win64/**/*.h"],
         checkpoint_interval=args.checkpoint_interval,
         keep_checkpoints=args.keep_checkpoints,
         symstore_product=project.project_name,
@@ -460,7 +428,109 @@ def main() -> None:
     context = Context(args)
 
     try:
-        publish(context, cfg)
+        logger.info("=== Publish binary files ===")
+
+        logger.info("Download index.json")
+        index = context.s3_client.download_json(context.args.s3_bucket_name, "index.json", default=[])
+
+        if len(index) == 0:
+            logger.info("Empty index.json. Fresh sync")
+        elif context.current_sha in index:
+            logger.info(f"{context.current_sha} already published, skipping (likely a CI re-run of an already-built commit)")
+            logger.info("=== Finished processing binary files ===")
+            return
+
+        logger.info("Scan file states")
+        new_state = scan_sync_files(cfg, context.hash_cache)
+        logger.info(f"Finished scan. Found {len(new_state)} files.")
+
+        logger.info("Download JSON with old state")
+        old_state = context.s3_client.download_json(context.args.s3_bucket_name, f"manifests/{index[-1]}.json")["files"] if index else {}
+
+        changed, removed = compute_diff(old_state, new_state)
+        version = None
+        if changed or removed:
+            version = context.current_sha
+            logger.info(f"Publishing {version}: {len(changed)} changed, {len(removed)} removed")
+
+            if changed:
+                logger.info("Build zip of changed files")
+                zip_file_path = build_zip(cfg.root_folder, changed, context.tmp_root)
+
+                if context.args.skip_upload:
+                    return
+                
+                logger.info("Upload zip")
+                context.s3_client.upload_file(context.args.s3_bucket_name, f"deltas/{version}.7z", zip_file_path)
+                zip_file_path.unlink()
+
+            manifest_payload: VersionManifest = {
+                "files": new_state,
+                "changed": changed,
+                "removed": removed,
+            }
+            context.s3_client.upload_bytes(
+                context.args.s3_bucket_name,
+                f"manifests/{version}.json",
+                json.dumps(manifest_payload).encode(),
+                content_type="application/json",
+            )
+
+            index.append(version)
+
+            logger.info("Download JSON with checkpoints")
+            checkpoints = context.s3_client.download_json(context.args.s3_bucket_name, "checkpoints.json", default=[])
+
+            logger.info(f"Checkpoint interval: {cfg.checkpoint_interval} - Number of deltas : {len(index)}")
+
+            if len(index) % cfg.checkpoint_interval == 0:
+                logger.info(f"Need to create a new checkpoint at version #{len(index)}")
+                zip_file_path = build_zip(cfg.root_folder, list(new_state.keys()), context.tmp_root)
+
+                logger.info("Upload zip")
+                context.s3_client.upload_file(context.args.s3_bucket_name, f"checkpoints/{version}.7z", zip_file_path)
+                zip_file_path.unlink()
+                checkpoints.append(version)
+            else:
+                logger.info("No need to create a new checkpoint")
+
+            index, checkpoints = prune_old_versions(context, cfg, index, checkpoints)
+
+            logger.info("Upload index.json")
+            context.s3_client.upload_bytes(context.args.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
+
+            logger.info("Upload checkpoints.json")
+            context.s3_client.upload_bytes(
+                context.args.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json"
+            )
+        else:
+            logger.info("No changes in synced binaries.")
+
+        if not context.args.disable_symbol_store_upload:
+            # Symbol store publish (PDB/DLL/EXE), independent of whether the sync pipeline changed.
+            # Deliberately NOT combined with glob_files — those are for arbitrary extra files
+            # (like the BuildRules JSONs) that have no business being in the symbol store.
+            logger.info("Scan file states for debug files")
+            symstore_state = scan_by_ext(cfg, SYMSTORE_EXT, context.hash_cache)
+            logger.info(f"Finished scan. Found {len(symstore_state)} files.")
+
+            logger.info("Download symstore-manifest.json")
+            prev_symstore_state = context.s3_client.download_json(context.args.s3_bucket_name, "symstore-manifest.json", default={})
+            symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
+
+            if symstore_changed:
+                publish_to_symbol_store(context, symstore_changed, cfg)
+
+                logger.info("Upload symstore-manifest.json")
+                context.s3_client.upload_bytes(
+                    context.args.s3_bucket_name, "symstore-manifest.json", json.dumps(symstore_state).encode(), content_type="application/json"
+                )
+            else:
+                logger.info("No changes for symbol store")
+        else:
+            logger.info("Upload on the symbol store is disabled")
+
+        logger.info("=== Finished processing binary files ===")
 
         logger.info("Save hash cache")
         context.hash_cache.save()
