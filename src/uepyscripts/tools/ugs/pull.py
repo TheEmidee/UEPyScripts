@@ -11,6 +11,7 @@ from gamedevtools.s3 import S3Client
 from uepyscripts import logger
 from uepyscripts.internal.engine import resolve_engine
 from uepyscripts.internal.project import resolve_project
+from uepyscripts.tools.ugs.git_utils import get_local_ancestry, resolve_nearest_published_ancestor
 from uepyscripts.tools.ugs.ugs_types import Manifest, VersionManifest
 
 """
@@ -35,7 +36,6 @@ Requires 7z.exe on PATH (or set SEVEN_ZIP_PATH below).
 
 # ---- CONFIG ----------------------------------------------------------
 LOCAL_STATE_FILE = ".sync-state.json"  # {"version": ..., "manifest": {...}}
-ANCESTRY_LOOKBACK = 2000
 
 
 class LocalState(TypedDict):
@@ -68,11 +68,6 @@ class LocalStateManager:
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.data, indent=2))
-
-
-def get_local_ancestry(limit: int = ANCESTRY_LOOKBACK) -> list[str]:
-    out = subprocess.check_output(["git", "log", f"-{limit}", "--format=%H", "HEAD"], text=True)
-    return out.splitlines()
 
 
 def download_and_extract_archive(context: Context, s3_file_path: str) -> None:
@@ -163,20 +158,6 @@ def apply_delta(context: Context, version: str, local_manifest: Manifest) -> Man
     return manifest["files"]
 
 
-def resolve_target_version(index: list[str], ancestry: list[str]) -> tuple[str | None, bool]:
-    """Finds the nearest ancestor SHA (including HEAD itself) present in the
-    index. Returns None if nothing has ever been published reachable from HEAD."""
-    index_set = set(index)
-    for sha in ancestry:
-        if sha in index_set:
-            return sha, True
-
-    if index:
-        return index[-1], False
-
-    return None, True
-
-
 def sync(context: Context, target_version: str, state: LocalState) -> LocalState:
     logger.info("=== Start syncing binaries ===")
 
@@ -259,8 +240,8 @@ def main() -> None:
 
     warn_if_source_dirty()
 
-    ancestry = get_local_ancestry()
-    target_version, is_exact_match = resolve_target_version(context.commit_index, ancestry)
+    ancestry = get_local_ancestry(engine.root_path)
+    target_version, is_exact_match = resolve_nearest_published_ancestor(context.commit_index, ancestry)
 
     if target_version is None:
         logger.info("No published version found in HEAD's ancestry — nothing to sync.")

@@ -27,7 +27,14 @@ from gamedevtools.s3 import S3Client
 from uepyscripts import logger
 from uepyscripts.internal.engine import resolve_engine
 from uepyscripts.internal.project import resolve_project
-from uepyscripts.tools.ugs.ugs_types import VersionManifest
+from uepyscripts.tools.ugs.git_utils import (
+    ANCESTRY_LOOKBACK,
+    get_current_branch,
+    get_current_sha,
+    get_local_ancestry,
+    resolve_nearest_published_ancestor,
+)
+from uepyscripts.tools.ugs.ugs_types import Manifest, VersionManifest
 
 # ---- CONFIG ----------------------------------------------------------
 LOCAL_HASH_CACHE = ".hash-cache.json"
@@ -85,7 +92,7 @@ class HashCache:
 
 
 class Context:
-    def __init__(self, args: argparse.Namespace) -> None:
+    def __init__(self, args: argparse.Namespace, root_path: Path) -> None:
         self.args = args
         self.s3_client: S3Client = S3Client(
             access_key=args.s3_access_key,
@@ -95,18 +102,13 @@ class Context:
         self.symbol_store_path: str = args.symbol_store_path
         self.tmp_root: Path = Path(tempfile.mkdtemp(prefix="publish-"))
         self.hash_cache = HashCache()
-        self.current_sha = get_current_sha()
+        self.root_path = root_path
+        self.current_sha = get_current_sha(root_path)
+        self.current_branch = get_current_branch(root_path)
 
     def finalize(self) -> None:
         if not self.args.keep_temp_directory:
             shutil.rmtree(self.tmp_root, ignore_errors=True)
-
-
-def get_current_sha() -> str:
-    sha = os.environ.get("GIT_COMMIT")  # Jenkins sets this automatically
-    if sha:
-        return sha
-    return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 
 def compute_common_root(engine_root: Path, project_root: Path) -> Path:
@@ -417,17 +419,24 @@ def main() -> None:
 
     cfg = FilesConfiguration(
         root_folder=engine.root_path,
-        directories=["Engine/Binaries/Win64", "Engine/Platforms", "Engine/Plugins", "Engine/Intermediate/Build/BuildRules", "Engine/Intermediate/Build/Win64/**/"],
+        directories=[
+            "Engine/Binaries/Win64",
+            "Engine/Platforms",
+            "Engine/Plugins",
+            "Engine/Intermediate/Build/BuildRules",
+            "Engine/Intermediate/Build/Win64/**/",
+        ],
         glob_files=["Engine/Intermediate/Build/BuildRules/*.json", "Engine/Intermediate/Build/Win64/**/*.h"],
         checkpoint_interval=args.checkpoint_interval,
         keep_checkpoints=args.keep_checkpoints,
         symstore_product=project.project_name,
     )
 
-    context = Context(args)
+    context = Context(args, engine.root_path)
 
     try:
         logger.info("=== Publish binary files ===")
+        logger.info(f"Current branch: {context.current_branch}")
 
         logger.info("Download index.json")
         index = context.s3_client.download_json(context.args.s3_bucket_name, "index.json", default=[])
@@ -443,8 +452,25 @@ def main() -> None:
         new_state = scan_sync_files(cfg, context.hash_cache)
         logger.info(f"Finished scan. Found {len(new_state)} files.")
 
-        logger.info("Download JSON with old state")
-        old_state = context.s3_client.download_json(context.args.s3_bucket_name, f"manifests/{index[-1]}.json")["files"] if index else {}
+        logger.info("Resolve diff baseline from git ancestry")
+        ancestry = get_local_ancestry(context.root_path)
+        baseline_sha, is_exact = resolve_nearest_published_ancestor(index, ancestry)
+
+        old_state: dict[str, str]
+        if baseline_sha is None:
+            logger.info("No published version exists yet — treating as a fresh sync")
+            old_state = {}
+        elif not is_exact:
+            logger.warning(
+                f"No published ancestor found for branch '{context.current_branch}' within the last "
+                f"{ANCESTRY_LOOKBACK} commits; treating as a fresh sync instead of diffing against "
+                f"unrelated commit {baseline_sha}"
+            )
+            old_state = {}
+        else:
+            logger.info(f"Using {baseline_sha} as diff baseline for branch '{context.current_branch}'")
+            old_manifest = cast(VersionManifest, context.s3_client.download_json(context.args.s3_bucket_name, f"manifests/{baseline_sha}.json"))
+            old_state = old_manifest["files"]
 
         changed, removed = compute_diff(old_state, new_state)
         version = None
@@ -462,7 +488,7 @@ def main() -> None:
 
                 if context.args.skip_upload:
                     return
-                
+
                 logger.info("Upload zip")
                 context.s3_client.upload_file(context.args.s3_bucket_name, f"deltas/{version}.7z", zip_file_path)
                 zip_file_path.unlink()
