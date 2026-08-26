@@ -24,6 +24,14 @@ def get_local_ancestry(cwd: Path, limit: int = ANCESTRY_LOOKBACK) -> list[str]:
     return out.splitlines()
 
 
+def get_remote_reachable_shas(cwd: Path, remote: str = "origin") -> set[str]:
+    """All commit SHAs reachable from any current branch tip on `remote`, after
+    pruning local remote-tracking refs for branches deleted on the remote."""
+    subprocess.run(["git", "fetch", "--prune", remote], cwd=cwd, check=True, capture_output=True, text=True)
+    out = subprocess.check_output(["git", "rev-list", f"--remotes={remote}"], cwd=cwd, text=True)
+    return set(out.splitlines())
+
+
 def resolve_nearest_published_ancestor(index: list[str], ancestry: list[str]) -> tuple[str | None, bool]:
     """Finds the nearest ancestor SHA (including HEAD itself) present in the
     index. Returns None if nothing has ever been published reachable from HEAD

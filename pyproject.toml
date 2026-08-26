@@ -134,6 +134,7 @@ ue-compile-editor = "uepyscripts.tools.ue.compile_editor:main"
 ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
 ue-ugs-push = "uepyscripts.tools.ugs.push:main"
 ue-ugs-pull = "uepyscripts.tools.ugs.pull:main"
+ue-ugs-cleanup = "uepyscripts.tools.ugs.cleanup:main"
 ue-ci-cleanup = "uepyscripts.tools.ci.cleanup:main"
 ue-ci-run-buildgraph = "uepyscripts.tools.ci.buildgraph:main"
 
