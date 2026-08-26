@@ -75,7 +75,7 @@ class HashCache:
     def save(self) -> None:
         self.local_hash_cache.parent.mkdir(parents=True, exist_ok=True)
         serializable = {path: asdict(entry) for path, entry in self.cache.items()}
-        self.local_hash_cache.write_text(json.dumps(serializable))
+        self.local_hash_cache.write_text(json.dumps(serializable, indent=2, sort_keys=True))
 
     def get(self, path: str) -> HashCacheInfos | None:
         return self.cache.get(path)
@@ -414,7 +414,6 @@ def main() -> None:
         exit(1)
 
     engine = resolve_engine(project)
-    # directories += relative_dirs(project.root_folder, engine.root_path, ["Binaries/Win64", "Plugins"])
 
     cfg = FilesConfiguration(
         root_folder=engine.root_path,
