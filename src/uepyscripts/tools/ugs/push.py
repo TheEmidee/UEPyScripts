@@ -453,6 +453,10 @@ def main() -> None:
             logger.info(f"Publishing {version}: {len(changed)} changed, {len(removed)} removed")
 
             if changed:
+                logger.info("Saving list of changed files in Engine/Saved/changed_files.txt")
+                with open(engine.saved_path.joinpath("changed_files.txt").resolve(), "w") as file:
+                    file.write("\n".join(changed))
+
                 logger.info("Build zip of changed files")
                 zip_file_path = build_zip(cfg.root_folder, changed, context.tmp_root)
 
