@@ -397,6 +397,12 @@ def parse_arguments() -> argparse.Namespace:
         default=2,
         help="Number of checkpoints to retain; older ones (and their deltas) get pruned (default: 2)",
     )
+    parser.add_argument(
+        "--checkpoint-branch",
+        type=str,
+        default="develop",
+        help="Only create new checkpoints when publishing from this branch (default: develop)",
+    )
 
     return parser.parse_args()
 
@@ -513,7 +519,12 @@ def main() -> None:
 
             logger.info(f"Checkpoint interval: {cfg.checkpoint_interval} - Number of deltas : {len(index)}")
 
-            if len(index) % cfg.checkpoint_interval == 0:
+            if context.current_branch != context.args.checkpoint_branch:
+                logger.info(
+                    f"Branch '{context.current_branch}' is not the checkpoint branch "
+                    f"('{context.args.checkpoint_branch}') — skipping checkpoint creation"
+                )
+            elif len(index) % cfg.checkpoint_interval == 0:
                 logger.info(f"Need to create a new checkpoint at version #{len(index)}")
                 zip_file_path = build_zip(cfg.root_folder, list(new_state.keys()), context.tmp_root)
 
