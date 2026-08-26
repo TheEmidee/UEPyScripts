@@ -3,7 +3,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 from gamedevtools.s3 import S3Client
@@ -54,7 +54,7 @@ class Context:
             region=args.s3_bucket_region,
         )
         logger.info("Download index.json")
-        self.commit_index = self.s3_client.download_json(self.s3_bucket_name, "index.json", default=[])
+        self.commit_index = cast(list[str], self.s3_client.download_json(self.s3_bucket_name, "index.json", default=[]))
 
 
 class LocalStateManager:
@@ -124,7 +124,7 @@ def apply_checkpoint(context: Context, version: str, old_manifest: Manifest) -> 
 
     download_and_extract_archive(context, f"checkpoints/{version}.7z")
 
-    manifest: VersionManifest = context.s3_client.download_json(context.s3_bucket_name, f"manifests/{version}.json")
+    manifest = cast(VersionManifest, context.s3_client.download_json(context.s3_bucket_name, f"manifests/{version}.json"))
     new_manifest = manifest["files"]
 
     stale = [p for p in old_manifest if p not in new_manifest]
@@ -140,7 +140,7 @@ def apply_checkpoint(context: Context, version: str, old_manifest: Manifest) -> 
 
 
 def apply_delta(context: Context, version: str, local_manifest: Manifest) -> Manifest:
-    manifest: VersionManifest = context.s3_client.download_json(context.s3_bucket_name, f"manifests/{version}.json")
+    manifest = cast(VersionManifest, context.s3_client.download_json(context.s3_bucket_name, f"manifests/{version}.json"))
 
     if manifest["changed"]:
         download_and_extract_archive(context, f"deltas/{version}.7z")
@@ -172,7 +172,7 @@ def sync(context: Context, target_version: str, state: LocalState) -> LocalState
 
     try:
         logger.info("Download checkpoints")
-        checkpoints = context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[])
+        checkpoints = cast(list[str], context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[]))
     except ClientError:
         checkpoints = []
 

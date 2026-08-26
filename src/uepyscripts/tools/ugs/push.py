@@ -20,6 +20,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import cast
 
 import blake3
 from gamedevtools.s3 import S3Client
@@ -439,7 +440,7 @@ def main() -> None:
         logger.info(f"Current branch: {context.current_branch}")
 
         logger.info("Download index.json")
-        index = context.s3_client.download_json(context.args.s3_bucket_name, "index.json", default=[])
+        index = cast(list[str], context.s3_client.download_json(context.args.s3_bucket_name, "index.json", default=[]))
 
         if len(index) == 0:
             logger.info("Empty index.json. Fresh sync")
@@ -508,7 +509,7 @@ def main() -> None:
             index.append(version)
 
             logger.info("Download JSON with checkpoints")
-            checkpoints = context.s3_client.download_json(context.args.s3_bucket_name, "checkpoints.json", default=[])
+            checkpoints = cast(list[str], context.s3_client.download_json(context.args.s3_bucket_name, "checkpoints.json", default=[]))
 
             logger.info(f"Checkpoint interval: {cfg.checkpoint_interval} - Number of deltas : {len(index)}")
 
@@ -544,7 +545,9 @@ def main() -> None:
             logger.info(f"Finished scan. Found {len(symstore_state)} files.")
 
             logger.info("Download symstore-manifest.json")
-            prev_symstore_state = context.s3_client.download_json(context.args.s3_bucket_name, "symstore-manifest.json", default={})
+            prev_symstore_state = cast(
+                Manifest, context.s3_client.download_json(context.args.s3_bucket_name, "symstore-manifest.json", default={})
+            )
             symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
 
             if symstore_changed:
