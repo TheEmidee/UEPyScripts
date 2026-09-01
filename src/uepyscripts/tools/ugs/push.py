@@ -428,10 +428,10 @@ def main() -> None:
         root_folder=engine.root_path,
         directories=[
             "Engine/Binaries/Win64",
-            "Engine/Platforms",
             "Engine/Plugins",
             "Engine/Intermediate/Build/BuildRules",
             "Engine/Intermediate/Build/Win64/**/",
+            "Engine/Plugins/**/Intermediate/**/",
         ],
         glob_files=["Engine/Intermediate/Build/BuildRules/*.json", "Engine/Intermediate/Build/Win64/**/*.h"],
         checkpoint_interval=args.checkpoint_interval,
