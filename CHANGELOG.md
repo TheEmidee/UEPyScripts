@@ -9,6 +9,18 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.4.0] - 2026-09-03
+
+### Added
+
+- Added UGS scripts
+  Added argument no-single-node to tools.ci.buildgraph ([#24](https://github.com/TheEmidee/JenkinsFileGenerator/issues/24))
+
+### Changed
+
+- Allowed run.buildgraph to run on external uproject and xml scripts ([#24](https://github.com/TheEmidee/JenkinsFileGenerator/issues/24))
+
+
 ## [1.3.0] - 2026-07-24
 
 ### Changed
