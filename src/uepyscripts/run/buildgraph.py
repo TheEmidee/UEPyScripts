@@ -30,31 +30,32 @@ def run(target: str, arguments: list[str]) -> int:
 
     uat_arguments.append(f"-Project={project.uproject_path}")
 
-    automation_scripts_directories = config["Project"].get("AutomationScriptsDirectories")
-    if automation_scripts_directories == "" or automation_scripts_directories is None:
-        logger.info("No automation scripts directory is set")
-    else:
-        automation_scripts_paths = automation_scripts_directories.split("+")
+    if config.valid:
+        automation_scripts_directories = config["Project"].get("AutomationScriptsDirectories")
+        if automation_scripts_directories == "" or automation_scripts_directories is None:
+            logger.info("No automation scripts directory is set")
+        else:
+            automation_scripts_paths = automation_scripts_directories.split("+")
 
-        for automation_scripts_path_str in automation_scripts_paths:
-            automation_scripts_path = Path(automation_scripts_path_str)
-            automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
-            if not automation_scripts_path.exists():
-                logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
-                continue
+            for automation_scripts_path_str in automation_scripts_paths:
+                automation_scripts_path = Path(automation_scripts_path_str)
+                automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
+                if not automation_scripts_path.exists():
+                    logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
+                    continue
 
-            logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
-            uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
+                logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
+                uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
 
-    shared_properties_str = config["Project"].get("BuildgraphSharedProperties", "")
-    if shared_properties_str == "" or shared_properties_str is None:
-        logger.info("No shared properties to set")
-    else:
-        shared_properties = dict(pair.split("=") for pair in shared_properties_str.split("+")) if shared_properties_str else {}
+        shared_properties_str = config["Project"].get("BuildgraphSharedProperties", "")
+        if shared_properties_str == "" or shared_properties_str is None:
+            logger.info("No shared properties to set")
+        else:
+            shared_properties = dict(pair.split("=") for pair in shared_properties_str.split("+")) if shared_properties_str else {}
 
-        if shared_properties is not None:
-            for key, value in shared_properties.items():
-                uat_arguments.append(f"-set:{key}={value}")
+            if shared_properties is not None:
+                for key, value in shared_properties.items():
+                    uat_arguments.append(f"-set:{key}={value}")
 
     for arg in arguments:
         uat_arguments.append(arg)
