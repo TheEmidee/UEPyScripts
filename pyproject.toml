@@ -44,7 +44,8 @@ dependencies = [
   "urllib3",
   "invoke",
   "types-invoke",
-  "GameDevTools"
+  "GameDevTools",
+  "blake3"
 ]
 
 urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
@@ -91,7 +92,7 @@ fixable = ["ALL"]
 convention = "google"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 warn_return_any = true
 disallow_untyped_defs = true
 
@@ -131,6 +132,9 @@ ue-generate-solution = "uepyscripts.tools.ue.generate_solution:main"
 ue-close-editor = "uepyscripts.tools.ue.close_editor:main"
 ue-compile-editor = "uepyscripts.tools.ue.compile_editor:main"
 ue-check-engine-installation = "uepyscripts.tools.ue.check_engine_installation:main"
+ue-ugs-push = "uepyscripts.tools.ugs.push:main"
+ue-ugs-pull = "uepyscripts.tools.ugs.pull:main"
+ue-ugs-cleanup = "uepyscripts.tools.ugs.cleanup:main"
 ue-ci-cleanup = "uepyscripts.tools.ci.cleanup:main"
 ue-ci-run-buildgraph = "uepyscripts.tools.ci.buildgraph:main"
 

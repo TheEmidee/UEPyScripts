@@ -14,7 +14,8 @@ class Engine:
     class Runner:
         def __init__(self, path: Path, capture_output: bool, wait_process: bool = True, extra_args: list[str] = []) -> None:
             if not path.exists():
-                raise FileNotFoundError(f"The file {path} does not exist")
+                logger.warning(f"The file {path} does not exist")
+                return
 
             self.path = path.resolve()
             self.capture_output = capture_output
@@ -49,6 +50,7 @@ class Engine:
         self.path = self.root_path.joinpath("Engine").resolve()
         self.build_path = self.path.joinpath("Build").resolve()
         self.batchfiles_path = self.build_path.joinpath("BatchFiles").resolve()
+        self.saved_path = self.path.joinpath("Saved").resolve()
         self.version = self.get_version_number()
         self.uat_path = self.Runner(self.batchfiles_path.joinpath("RunUAT.bat"), True)
         self.ubt_path = self.Runner(

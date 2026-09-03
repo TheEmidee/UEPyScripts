@@ -4,14 +4,23 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .. import logger
-from ..context import config, engine, project
+from ..internal.config import resolve_config
+from ..internal.engine import resolve_engine
+from ..internal.project import resolve_project
 
 
-def run(target: str, arguments: list[str]) -> int:
+def run(target: str, arguments: list[str], script: Optional[str] = None, uproject_path: Optional[str] = None) -> int:
     logger.info(f"Run Buildgraph - Target : {target}")
     logger.info(f"Arguments : {arguments}")
 
-    buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
+    project = resolve_project(Path(uproject_path) if uproject_path else None)
+    engine = resolve_engine(project)
+    config = resolve_config(project)
+
+    if script:
+        buildgraph_path = Path(script)
+    else:
+        buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
     logger.info(f"Buildgraph XML path : {buildgraph_path}")
 
     if not buildgraph_path.exists():
@@ -30,31 +39,32 @@ def run(target: str, arguments: list[str]) -> int:
 
     uat_arguments.append(f"-Project={project.uproject_path}")
 
-    automation_scripts_directories = config["Project"].get("AutomationScriptsDirectories")
-    if automation_scripts_directories == "" or automation_scripts_directories is None:
-        logger.info("No automation scripts directory is set")
-    else:
-        automation_scripts_paths = automation_scripts_directories.split("+")
+    if config.valid:
+        automation_scripts_directories = config["Project"].get("AutomationScriptsDirectories")
+        if automation_scripts_directories == "" or automation_scripts_directories is None:
+            logger.info("No automation scripts directory is set")
+        else:
+            automation_scripts_paths = automation_scripts_directories.split("+")
 
-        for automation_scripts_path_str in automation_scripts_paths:
-            automation_scripts_path = Path(automation_scripts_path_str)
-            automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
-            if not automation_scripts_path.exists():
-                logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
-                continue
+            for automation_scripts_path_str in automation_scripts_paths:
+                automation_scripts_path = Path(automation_scripts_path_str)
+                automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
+                if not automation_scripts_path.exists():
+                    logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
+                    continue
 
-            logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
-            uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
+                logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
+                uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
 
-    shared_properties_str = config["Project"].get("BuildgraphSharedProperties", "")
-    if shared_properties_str == "" or shared_properties_str is None:
-        logger.info("No shared properties to set")
-    else:
-        shared_properties = dict(pair.split("=") for pair in shared_properties_str.split("+")) if shared_properties_str else {}
+        shared_properties_str = config["Project"].get("BuildgraphSharedProperties", "")
+        if shared_properties_str == "" or shared_properties_str is None:
+            logger.info("No shared properties to set")
+        else:
+            shared_properties = dict(pair.split("=") for pair in shared_properties_str.split("+")) if shared_properties_str else {}
 
-        if shared_properties is not None:
-            for key, value in shared_properties.items():
-                uat_arguments.append(f"-set:{key}={value}")
+            if shared_properties is not None:
+                for key, value in shared_properties.items():
+                    uat_arguments.append(f"-set:{key}={value}")
 
     for arg in arguments:
         uat_arguments.append(arg)
@@ -66,15 +76,27 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Execute a buildgraph task based on a target and properties.")
     parser.add_argument("--target", type=str, default="", help="The target to run in the buildgraph file")
+    parser.add_argument(
+        "--script", type=str, default=None, help="Path to the buildgraph XML file. If not set, resolved from the project configuration."
+    )
+    parser.add_argument(
+        "--uproject",
+        type=str,
+        default=None,
+        help="Path to the .uproject file. Required when --script is set; otherwise auto-discovered from the current directory.",
+    )
     return parser.parse_known_args(argv)
 
 
-def validate_config(target: str, arguments: list[str]) -> None:
+def validate_config(target: str, arguments: list[str], script: Optional[str], uproject_path: Optional[str]) -> None:
     """Validate the configuration values."""
     pattern = r'-SingleNode=[^"]*'
 
     if not target and not any(re.search(pattern, item) for item in arguments):
         raise ValueError("Target is required")
+
+    if script and not uproject_path:
+        raise ValueError("--uproject is required when --script is set")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -87,13 +109,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     try:
         logger.info("Validating configuration")
-        validate_config(target, other_arguments)
+        validate_config(target, other_arguments, args.script, args.uproject)
     except (ValueError, TypeError) as e:
         logger.error(f"Configuration validation failed: {e}")
         raise e
 
     try:
-        return run(target, other_arguments)
+        return run(target, other_arguments, args.script, args.uproject)
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         raise e
