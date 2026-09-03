@@ -2,6 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from uepyscripts import logger
+
 ANCESTRY_LOOKBACK = 2000
 
 
@@ -16,7 +18,24 @@ def get_current_branch(cwd: Path) -> str:
     branch = os.environ.get("GIT_BRANCH")  # Jenkins' Git plugin sets this, sometimes as "origin/<branch>"
     if branch:
         return branch.split("/", 1)[1] if "/" in branch else branch
-    return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd, text=True).strip()
+
+    branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd, text=True).strip()
+    if branch != "HEAD":
+        return branch
+
+    # Detached HEAD (e.g. a CI checkout of an explicit ref rather than a
+    # tracked branch, with no GIT_BRANCH env var set either) — fall back to
+    # whichever local or remote-tracking ref currently points at this commit.
+    refs = subprocess.check_output(
+        ["git", "for-each-ref", "--points-at=HEAD", "--format=%(refname:short)", "refs/heads/", "refs/remotes/"],
+        cwd=cwd,
+        text=True,
+    ).splitlines()
+    for ref in refs:
+        return ref.split("/", 1)[1] if "/" in ref else ref
+
+    logger.warning("Could not resolve current branch: HEAD is detached and no ref points at it")
+    return branch
 
 
 def get_local_ancestry(cwd: Path, limit: int = ANCESTRY_LOOKBACK) -> list[str]:
