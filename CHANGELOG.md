@@ -9,6 +9,12 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.4.1] - 2026-09-03
+
+### Changed
+
+- Moved py.typed to the correct location
+
 ## [1.4.0] - 2026-09-03
 
 ### Added
