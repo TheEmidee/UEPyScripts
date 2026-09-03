@@ -117,9 +117,7 @@ def main() -> None:
     context.s3_client.upload_bytes(context.args.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
 
     logger.info("Upload checkpoints.json")
-    context.s3_client.upload_bytes(
-        context.args.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json"
-    )
+    context.s3_client.upload_bytes(context.args.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json")
 
     logger.info(f"Cleanup done. Deleted {len(keys)} key(s) for {len(orphaned)} orphaned commit(s).")
 

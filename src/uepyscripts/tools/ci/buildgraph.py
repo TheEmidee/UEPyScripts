@@ -119,16 +119,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     logger.info(f"Running ci.buildgraph with build tag: {args.build_tag} on machine {socket.gethostname()}")
 
-    default_arguments : list[str] = [
-        "-BuildMachine", 
-        "-NoP4"
-    ]
+    default_arguments: list[str] = ["-BuildMachine", "-NoP4"]
 
     if args.no_single_node:
         logger.info("The flag --no-single-node was passed. Run the task with Target and not with SingleNode")
-        default_arguments += [
-            f"--target={args.target}"
-        ]
+        default_arguments += [f"--target={args.target}"]
     else:
         shared_storage_dir = Path(config["Jenkins"]["BuildgraphSharedStoragePath"]) / args.build_tag
         logger.info(f"Shared storage directory: {shared_storage_dir}")
@@ -137,16 +132,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try_delete_local_buildgraph_folder(args.build_tag)
         cleanup_local_folder()
 
-        default_arguments += [
-            f"-SharedStorageDir={shared_storage_dir}", 
-            "-WriteToSharedStorage", 
-            f"-SingleNode={args.target}"
-            ]
+        default_arguments += [f"-SharedStorageDir={shared_storage_dir}", "-WriteToSharedStorage", f"-SingleNode={args.target}"]
 
-    updated_args = update_or_add_argument(
-        unknown_args,
-        default_arguments
-    )
+    updated_args = update_or_add_argument(unknown_args, default_arguments)
 
     return buildgraph.main(updated_args)
 

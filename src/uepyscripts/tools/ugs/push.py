@@ -556,9 +556,7 @@ def main() -> None:
             logger.info(f"Finished scan. Found {len(symstore_state)} files.")
 
             logger.info("Download symstore-manifest.json")
-            prev_symstore_state = cast(
-                Manifest, context.s3_client.download_json(context.args.s3_bucket_name, "symstore-manifest.json", default={})
-            )
+            prev_symstore_state = cast(Manifest, context.s3_client.download_json(context.args.s3_bucket_name, "symstore-manifest.json", default={}))
             symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
 
             if symstore_changed:
