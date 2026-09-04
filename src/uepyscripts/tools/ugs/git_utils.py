@@ -4,7 +4,7 @@ from pathlib import Path
 
 from uepyscripts import logger
 
-ANCESTRY_LOOKBACK = 2000
+ANCESTRY_LOOKBACK = 500
 
 
 def get_current_sha(cwd: Path) -> str:
@@ -38,7 +38,49 @@ def get_current_branch(cwd: Path) -> str:
     return branch
 
 
+def is_shallow_repository(cwd: Path) -> bool:
+    out = subprocess.check_output(["git", "rev-parse", "--is-shallow-repository"], cwd=cwd, text=True).strip()
+    return out == "true"
+
+
+def deepen_shallow_history(cwd: Path, limit: int, remote: str = "origin") -> bool:
+    """Pulls down the commits missing from a shallow checkout, and only the
+    commits: `--filter=tree:0` keeps trees and blobs on the server, so this
+    stays a metadata-sized fetch even on a repository the size of an engine
+    tree. Returns False (after logging) when the remote refuses, so callers
+    can carry on with whatever history is available locally."""
+    try:
+        subprocess.run(
+            ["git", "fetch", "--no-tags", "--filter=tree:0", f"--deepen={limit}", remote],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        reason = e.stderr.strip() or e
+        logger.warning(f"Could not deepen shallow history from '{remote}' ({reason}); ancestry walking is limited to the local history")
+        return False
+
+
 def get_local_ancestry(cwd: Path, limit: int = ANCESTRY_LOOKBACK) -> list[str]:
+    ancestry = _log_ancestry(cwd, limit)
+
+    # CI checkouts are typically shallow clones (Jenkins' cloneOption(depth: 1)),
+    # where HEAD is a grafted boundary commit: `git log HEAD` stops at HEAD
+    # itself and every already-published parent looks unreachable, which would
+    # downgrade an incremental publish into a full fresh sync. Deepen first so
+    # the walk sees the real ancestry.
+    if len(ancestry) < limit and is_shallow_repository(cwd):
+        logger.info(f"Shallow checkout detected ({len(ancestry)} commit(s) available); deepening history to {limit} commits")
+        if deepen_shallow_history(cwd, limit):
+            ancestry = _log_ancestry(cwd, limit)
+
+    return ancestry
+
+
+def _log_ancestry(cwd: Path, limit: int) -> list[str]:
     out = subprocess.check_output(["git", "log", f"-{limit}", "--format=%H", "HEAD"], cwd=cwd, text=True)
     return out.splitlines()
 
