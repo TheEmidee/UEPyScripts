@@ -1,1 +1,0 @@
-Fixed git_utils.get_local_ancestry to support shallow clones

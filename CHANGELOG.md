@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.4.3] - 2026-09-04
+
+### Fixed
+
+- Fixed git_utils.get_local_ancestry to support shallow clones ([#26](https://github.com/TheEmidee/JenkinsFileGenerator/issues/26))
+
+
 ## [1.4.2] - 2026-09-04
 
 ### Changed
