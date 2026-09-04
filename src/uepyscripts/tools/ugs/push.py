@@ -35,10 +35,9 @@ from uepyscripts.tools.ugs.git_utils import (
     get_local_ancestry,
     resolve_nearest_published_ancestor,
 )
-from uepyscripts.tools.ugs.ugs_types import Manifest, VersionManifest
+from uepyscripts.tools.ugs.ugs_types import HashCacheEntry, HashCacheManifest, Manifest, VersionManifest
 
 # ---- CONFIG ----------------------------------------------------------
-LOCAL_HASH_CACHE = ".hash-cache.json"
 
 # Extensions that go through the delta/checkpoint sync pipeline (no PDBs — see symstore below)
 SYNC_EXT = {".dll", ".exe", ".lib", ".modules", ".target"}
@@ -72,18 +71,18 @@ class HashCacheInfos:
 
 
 class HashCache:
-    def __init__(self) -> None:
+    def __init__(self, commit_sha: str) -> None:
+        self.commit_sha = commit_sha
         self.cache: dict[str, HashCacheInfos] = dict()
-        self.local_hash_cache = Path(LOCAL_HASH_CACHE)
 
-        if self.local_hash_cache.exists():
-            raw = json.loads(self.local_hash_cache.read_text())
-            self.cache = {path: HashCacheInfos(**entry) for path, entry in raw.items()}
+    def seed_from(self, files: dict[str, HashCacheEntry]) -> None:
+        self.cache = {path: HashCacheInfos(**entry) for path, entry in files.items()}
 
-    def save(self) -> None:
-        self.local_hash_cache.parent.mkdir(parents=True, exist_ok=True)
-        serializable = {path: asdict(entry) for path, entry in self.cache.items()}
-        self.local_hash_cache.write_text(json.dumps(serializable, indent=2, sort_keys=True))
+    def to_manifest(self) -> HashCacheManifest:
+        return {
+            "commit_sha": self.commit_sha,
+            "files": {path: cast(HashCacheEntry, asdict(entry)) for path, entry in self.cache.items()},
+        }
 
     def get(self, path: str) -> HashCacheInfos | None:
         return self.cache.get(path)
@@ -102,10 +101,35 @@ class Context:
         )
         self.symbol_store_path: str = args.symbol_store_path
         self.tmp_root: Path = Path(tempfile.mkdtemp(prefix="publish-"))
-        self.hash_cache = HashCache()
         self.root_path = root_path
         self.current_sha = get_current_sha(root_path)
         self.current_branch = get_current_branch(root_path)
+        self.ancestry: list[str] = get_local_ancestry(root_path)
+        self.hash_cache, self.hash_cache_index = self._load_hash_cache()
+
+    def _load_hash_cache(self) -> tuple[HashCache, list[str]]:
+        """Resolves the nearest commit with an uploaded hash cache and seeds a
+        fresh HashCache from it. Unlike the manifest baseline used for diffing,
+        an inexact match is fine here: a fingerprint mismatch just falls back to
+        a full hash for that file, no worse than a cold-cache case, so
+        there's no correctness risk in seeding from a non-ancestor."""
+        bucket_name = self.args.s3_bucket_name
+        hash_cache_index = cast(list[str], self.s3_client.download_json(bucket_name, "hash_caches/index.json", default=[]))
+        baseline_sha, _ = resolve_nearest_published_ancestor(hash_cache_index, self.ancestry)
+
+        hash_cache = HashCache(self.current_sha)
+        if baseline_sha is None:
+            logger.info("No hash cache baseline found — starting with a cold hash cache")
+            return hash_cache, hash_cache_index
+
+        try:
+            manifest = cast(HashCacheManifest, self.s3_client.download_json(bucket_name, f"hash_caches/{baseline_sha}.json"))
+            hash_cache.seed_from(manifest["files"])
+            logger.info(f"Seeded hash cache from {baseline_sha} ({len(manifest['files'])} entries)")
+        except Exception as e:
+            logger.warning(f"Failed to load hash cache from hash_caches/{baseline_sha}.json ({e}); starting with a cold hash cache")
+
+        return hash_cache, hash_cache_index
 
     def finalize(self) -> None:
         if not self.args.keep_temp_directory:
@@ -327,6 +351,24 @@ def prune_old_versions(context: Context, cfg: FilesConfiguration, index: list[st
     return index[cutoff_idx:], checkpoints_to_keep
 
 
+def prune_old_hash_caches(context: Context, hash_cache_index: list[str], keep: int) -> list[str]:
+    """Simple count-based retention for the hash-cache side-channel: unlike
+    index.json (only appended on actual content changes), hash_cache_index
+    grows once per run, so it needs its own, faster-turnover retention
+    rather than piggybacking on prune_old_versions's checkpoint-aligned
+    logic."""
+    if len(hash_cache_index) <= keep:
+        return hash_cache_index
+
+    to_delete = hash_cache_index[:-keep]
+    to_keep = hash_cache_index[-keep:]
+
+    logger.info(f"Pruning {len(to_delete)} old hash cache(s)")
+    context.s3_client.delete_keys(context.args.s3_bucket_name, [f"hash_caches/{sha}.json" for sha in to_delete])
+
+    return to_keep
+
+
 def publish_to_symbol_store(context: Context, paths: list[str], cfg: FilesConfiguration) -> None:
     """Indexes PDB/DLL/EXE files into the symbol store via symstore.exe."""
     logger.info("Publish to symbol store")
@@ -398,6 +440,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Number of checkpoints to retain; older ones (and their deltas) get pruned (default: 2)",
     )
     parser.add_argument(
+        "--keep_hash_caches",
+        type=int,
+        default=100,
+        help="Number of hash cache entries to retain in hash_caches/index.json; older ones get pruned (default: 100)",
+    )
+    parser.add_argument(
         "--checkpoint-branch",
         type=str,
         default="develop",
@@ -460,8 +508,7 @@ def main() -> None:
         logger.info(f"Finished scan. Found {len(new_state)} files.")
 
         logger.info("Resolve diff baseline from git ancestry")
-        ancestry = get_local_ancestry(context.root_path)
-        baseline_sha, is_exact = resolve_nearest_published_ancestor(index, ancestry)
+        baseline_sha, is_exact = resolve_nearest_published_ancestor(index, context.ancestry)
 
         old_state: dict[str, str]
         if baseline_sha is None:
@@ -573,8 +620,29 @@ def main() -> None:
 
         logger.info("=== Finished processing binary files ===")
 
-        logger.info("Save hash cache")
-        context.hash_cache.save()
+        if not context.args.skip_upload:
+            logger.info("Upload hash cache")
+            context.s3_client.upload_bytes(
+                context.args.s3_bucket_name,
+                f"hash_caches/{context.current_sha}.json",
+                json.dumps(context.hash_cache.to_manifest()).encode(),
+                content_type="application/json",
+            )
+
+            if context.current_sha not in context.hash_cache_index:
+                context.hash_cache_index.append(context.current_sha)
+
+            context.hash_cache_index = prune_old_hash_caches(context, context.hash_cache_index, context.args.keep_hash_caches)
+
+            logger.info("Upload hash_caches/index.json")
+            context.s3_client.upload_bytes(
+                context.args.s3_bucket_name,
+                "hash_caches/index.json",
+                json.dumps(context.hash_cache_index).encode(),
+                content_type="application/json",
+            )
+        else:
+            logger.info("Skipping hash cache upload (--skip-upload)")
     finally:
         context.finalize()
 
