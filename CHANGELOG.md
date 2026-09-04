@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.4.2] - 2026-09-04
+
+### Changed
+
+- Removed local hash cache in ugs.push in favor of storing it per commit SHA in the bucket ([#25](https://github.com/TheEmidee/JenkinsFileGenerator/issues/25))
+
+
 ## [1.4.1] - 2026-09-03
 
 ### Changed
