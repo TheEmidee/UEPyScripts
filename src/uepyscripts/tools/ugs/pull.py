@@ -12,6 +12,7 @@ from uepyscripts import logger
 from uepyscripts.internal.engine import resolve_engine
 from uepyscripts.internal.project import resolve_project
 from uepyscripts.tools.ugs.git_utils import get_local_ancestry, resolve_nearest_published_ancestor
+from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, S3Settings, add_s3_arguments, resolve_s3_settings
 from uepyscripts.tools.ugs.ugs_types import Manifest, VersionManifest
 
 """
@@ -44,14 +45,14 @@ class LocalState(TypedDict):
 
 
 class Context:
-    def __init__(self, root_folder: Path, args: argparse.Namespace) -> None:
+    def __init__(self, root_folder: Path, s3_settings: S3Settings) -> None:
         self.root_folder: Path = root_folder
-        self.s3_bucket_name: str = args.s3_bucket_name
-        self.s3_bucket_region: str = args.s3_bucket_region
+        self.s3_bucket_name: str = s3_settings.bucket_name
+        self.s3_bucket_region: str = s3_settings.bucket_region
         self.s3_client: S3Client = S3Client(
-            access_key=args.s3_access_key,
-            secret_key=args.s3_secret_key,
-            region=args.s3_bucket_region,
+            access_key=s3_settings.access_key,
+            secret_key=s3_settings.secret_key,
+            region=s3_settings.bucket_region,
         )
         logger.info("Download index.json")
         self.commit_index = cast(list[str], self.s3_client.download_json(self.s3_bucket_name, "index.json", default=[]))
@@ -207,12 +208,15 @@ def sync(context: Context, target_version: str, state: LocalState) -> LocalState
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Sync local engine + game binaries to match the current git HEAD. "
+            f"The S3 info is read from the [{S3_CONFIG_SECTION}] section of Config/PyScripts/config.ini, "
+            "and each value can be overridden by its command line argument."
+        )
+    )
     parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
-    parser.add_argument("--s3-bucket-name", type=str, help=("AWS S3 Bucket Name"))
-    parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
-    parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
-    parser.add_argument("--s3-secret-key", type=str, help=("AWS S3 Secret Key"))
+    add_s3_arguments(parser)
 
     return parser.parse_args()
 
@@ -234,9 +238,11 @@ def main() -> None:
 
     engine = resolve_engine(project)
 
+    s3_settings = resolve_s3_settings(project, args)
+
     local_state = LocalStateManager()
 
-    context = Context(engine.root_path, args)
+    context = Context(engine.root_path, s3_settings)
 
     warn_if_source_dirty()
 
