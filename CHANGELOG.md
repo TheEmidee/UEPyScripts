@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.4.4] - 2026-09-07
+
+### Changed
+
+- Unified settings between UGS push and pull: they are first fetched from the config.ini of the uproject, and can be override by console arguments ([#27](https://github.com/TheEmidee/JenkinsFileGenerator/issues/27))
+
+
 ## [1.4.3] - 2026-09-04
 
 ### Fixed
