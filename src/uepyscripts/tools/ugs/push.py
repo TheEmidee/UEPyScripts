@@ -35,6 +35,7 @@ from uepyscripts.tools.ugs.git_utils import (
     get_local_ancestry,
     resolve_nearest_published_ancestor,
 )
+from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, S3Settings, add_s3_arguments, resolve_s3_settings
 from uepyscripts.tools.ugs.ugs_types import HashCacheEntry, HashCacheManifest, Manifest, VersionManifest
 
 # ---- CONFIG ----------------------------------------------------------
@@ -92,12 +93,14 @@ class HashCache:
 
 
 class Context:
-    def __init__(self, args: argparse.Namespace, root_path: Path) -> None:
+    def __init__(self, args: argparse.Namespace, root_path: Path, s3_settings: S3Settings) -> None:
         self.args = args
+        self.s3_bucket_name: str = s3_settings.bucket_name
+        self.s3_bucket_region: str = s3_settings.bucket_region
         self.s3_client: S3Client = S3Client(
-            access_key=args.s3_access_key,
-            secret_key=args.s3_secret_key,
-            region=args.s3_bucket_region,
+            access_key=s3_settings.access_key,
+            secret_key=s3_settings.secret_key,
+            region=s3_settings.bucket_region,
         )
         self.symbol_store_path: str = args.symbol_store_path
         self.tmp_root: Path = Path(tempfile.mkdtemp(prefix="publish-"))
@@ -113,7 +116,7 @@ class Context:
         an inexact match is fine here: a fingerprint mismatch just falls back to
         a full hash for that file, no worse than a cold-cache case, so
         there's no correctness risk in seeding from a non-ancestor."""
-        bucket_name = self.args.s3_bucket_name
+        bucket_name = self.s3_bucket_name
         hash_cache_index = cast(list[str], self.s3_client.download_json(bucket_name, "hash_caches/index.json", default=[]))
         baseline_sha, _ = resolve_nearest_published_ancestor(hash_cache_index, self.ancestry)
 
@@ -346,7 +349,7 @@ def prune_old_versions(context: Context, cfg: FilesConfiguration, index: list[st
         keys_to_delete.append(f"checkpoints/{v}.7z")
 
     logger.info(f"Pruning {len(versions_to_delete)} version(s), {len(checkpoints_to_delete)} checkpoint(s)")
-    context.s3_client.delete_keys(context.args.s3_bucket_name, keys_to_delete)
+    context.s3_client.delete_keys(context.s3_bucket_name, keys_to_delete)
 
     return index[cutoff_idx:], checkpoints_to_keep
 
@@ -364,7 +367,7 @@ def prune_old_hash_caches(context: Context, hash_cache_index: list[str], keep: i
     to_keep = hash_cache_index[-keep:]
 
     logger.info(f"Pruning {len(to_delete)} old hash cache(s)")
-    context.s3_client.delete_keys(context.args.s3_bucket_name, [f"hash_caches/{sha}.json" for sha in to_delete])
+    context.s3_client.delete_keys(context.s3_bucket_name, [f"hash_caches/{sha}.json" for sha in to_delete])
 
     return to_keep
 
@@ -413,7 +416,13 @@ def publish_to_symbol_store(context: Context, paths: list[str], cfg: FilesConfig
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Check and install Unreal Engine installation for the given project.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Publish the engine + game binaries for the current git HEAD. "
+            f"The S3 info is read from the [{S3_CONFIG_SECTION}] section of Config/PyScripts/config.ini, "
+            "and each value can be overridden by its command line argument."
+        )
+    )
     parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
     parser.add_argument("--skip-upload", action=argparse.BooleanOptionalAction, help=("Set this to not upload anything on S3"))
     parser.add_argument(
@@ -421,10 +430,7 @@ def parse_arguments() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         help=("Set this to not delete the temporary directory when the script finishes"),
     )
-    parser.add_argument("--s3-bucket-name", type=str, help=("AWS S3 Bucket Name"))
-    parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
-    parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
-    parser.add_argument("--s3-secret-key", type=str, help=("AWS S3 Secret Key"))
+    add_s3_arguments(parser)
     parser.add_argument("--disable-symbol-store-upload", action=argparse.BooleanOptionalAction)
     parser.add_argument("--symbol-store-path", type=str, help=("Path of the shared symbol store folder"))
     parser.add_argument(
@@ -472,6 +478,8 @@ def main() -> None:
 
     engine = resolve_engine(project)
 
+    s3_settings = resolve_s3_settings(project, args)
+
     cfg = FilesConfiguration(
         root_folder=engine.root_path,
         directories=[
@@ -487,14 +495,14 @@ def main() -> None:
         symstore_product=project.project_name,
     )
 
-    context = Context(args, engine.root_path)
+    context = Context(args, engine.root_path, s3_settings)
 
     try:
         logger.info("=== Publish binary files ===")
         logger.info(f"Current branch: {context.current_branch}")
 
         logger.info("Download index.json")
-        index = cast(list[str], context.s3_client.download_json(context.args.s3_bucket_name, "index.json", default=[]))
+        index = cast(list[str], context.s3_client.download_json(context.s3_bucket_name, "index.json", default=[]))
 
         if len(index) == 0:
             logger.info("Empty index.json. Fresh sync")
@@ -523,7 +531,7 @@ def main() -> None:
             old_state = {}
         else:
             logger.info(f"Using {baseline_sha} as diff baseline for branch '{context.current_branch}'")
-            old_manifest = cast(VersionManifest, context.s3_client.download_json(context.args.s3_bucket_name, f"manifests/{baseline_sha}.json"))
+            old_manifest = cast(VersionManifest, context.s3_client.download_json(context.s3_bucket_name, f"manifests/{baseline_sha}.json"))
             old_state = old_manifest["files"]
 
         changed, removed = compute_diff(old_state, new_state)
@@ -544,7 +552,7 @@ def main() -> None:
                     return
 
                 logger.info("Upload zip")
-                context.s3_client.upload_file(context.args.s3_bucket_name, f"deltas/{version}.7z", zip_file_path)
+                context.s3_client.upload_file(context.s3_bucket_name, f"deltas/{version}.7z", zip_file_path)
                 zip_file_path.unlink()
 
             manifest_payload: VersionManifest = {
@@ -553,7 +561,7 @@ def main() -> None:
                 "removed": removed,
             }
             context.s3_client.upload_bytes(
-                context.args.s3_bucket_name,
+                context.s3_bucket_name,
                 f"manifests/{version}.json",
                 json.dumps(manifest_payload).encode(),
                 content_type="application/json",
@@ -562,7 +570,7 @@ def main() -> None:
             index.append(version)
 
             logger.info("Download JSON with checkpoints")
-            checkpoints = cast(list[str], context.s3_client.download_json(context.args.s3_bucket_name, "checkpoints.json", default=[]))
+            checkpoints = cast(list[str], context.s3_client.download_json(context.s3_bucket_name, "checkpoints.json", default=[]))
 
             logger.info(f"Checkpoint interval: {cfg.checkpoint_interval} - Number of deltas : {len(index)}")
 
@@ -576,7 +584,7 @@ def main() -> None:
                 zip_file_path = build_zip(cfg.root_folder, list(new_state.keys()), context.tmp_root)
 
                 logger.info("Upload zip")
-                context.s3_client.upload_file(context.args.s3_bucket_name, f"checkpoints/{version}.7z", zip_file_path)
+                context.s3_client.upload_file(context.s3_bucket_name, f"checkpoints/{version}.7z", zip_file_path)
                 zip_file_path.unlink()
                 checkpoints.append(version)
             else:
@@ -585,11 +593,11 @@ def main() -> None:
             index, checkpoints = prune_old_versions(context, cfg, index, checkpoints)
 
             logger.info("Upload index.json")
-            context.s3_client.upload_bytes(context.args.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
+            context.s3_client.upload_bytes(context.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
 
             logger.info("Upload checkpoints.json")
             context.s3_client.upload_bytes(
-                context.args.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json"
+                context.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json"
             )
         else:
             logger.info("No changes in synced binaries.")
@@ -603,7 +611,7 @@ def main() -> None:
             logger.info(f"Finished scan. Found {len(symstore_state)} files.")
 
             logger.info("Download symstore-manifest.json")
-            prev_symstore_state = cast(Manifest, context.s3_client.download_json(context.args.s3_bucket_name, "symstore-manifest.json", default={}))
+            prev_symstore_state = cast(Manifest, context.s3_client.download_json(context.s3_bucket_name, "symstore-manifest.json", default={}))
             symstore_changed, _ = compute_diff(prev_symstore_state, symstore_state)
 
             if symstore_changed:
@@ -611,7 +619,7 @@ def main() -> None:
 
                 logger.info("Upload symstore-manifest.json")
                 context.s3_client.upload_bytes(
-                    context.args.s3_bucket_name, "symstore-manifest.json", json.dumps(symstore_state).encode(), content_type="application/json"
+                    context.s3_bucket_name, "symstore-manifest.json", json.dumps(symstore_state).encode(), content_type="application/json"
                 )
             else:
                 logger.info("No changes for symbol store")
@@ -623,7 +631,7 @@ def main() -> None:
         if not context.args.skip_upload:
             logger.info("Upload hash cache")
             context.s3_client.upload_bytes(
-                context.args.s3_bucket_name,
+                context.s3_bucket_name,
                 f"hash_caches/{context.current_sha}.json",
                 json.dumps(context.hash_cache.to_manifest()).encode(),
                 content_type="application/json",
@@ -636,7 +644,7 @@ def main() -> None:
 
             logger.info("Upload hash_caches/index.json")
             context.s3_client.upload_bytes(
-                context.args.s3_bucket_name,
+                context.s3_bucket_name,
                 "hash_caches/index.json",
                 json.dumps(context.hash_cache_index).encode(),
                 content_type="application/json",
