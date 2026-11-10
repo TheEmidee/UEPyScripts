@@ -13,9 +13,8 @@ from pathlib import Path
 
 from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
+from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
 from uepyscripts.tools.ugs.git_utils import get_local_ancestry
-from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
-from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
 from uepyscripts.tools.ugs.sync import sync_version
 
 
@@ -44,8 +43,7 @@ def parse_arguments() -> argparse.Namespace:
         )
     )
     add_uproject_argument(parser)
-    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"Number of parallel downloads (default: {DEFAULT_JOBS})")
-    add_s3_arguments(parser)
+    add_publish_store_arguments(parser)
 
     return parser.parse_args()
 
@@ -60,18 +58,8 @@ def main() -> None:
 
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
-    project = workspace.project
-
-    if not project.is_native_project:
-        logger.fatal("You can only sync binaries for native projects")
-        exit(1)
-
-    engine = workspace.engine
-
-    s3_settings = resolve_s3_settings(workspace.config, args)
-    store = PublishStore.from_settings(s3_settings, jobs=args.jobs)
-
-    root_folder = engine.root_path
+    store = open_publish_store(workspace, args)
+    root_folder = workspace.engine.root_path
     warn_if_source_dirty(root_folder)
 
     outcome = sync_version(store, root_folder, get_local_ancestry(root_folder))

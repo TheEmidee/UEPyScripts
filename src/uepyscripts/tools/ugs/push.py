@@ -14,10 +14,9 @@ import argparse
 
 from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
+from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
 from uepyscripts.tools.ugs.git_utils import get_current_branch, get_current_sha, get_local_ancestry
 from uepyscripts.tools.ugs.publish import DEFAULT_KEEP_HASH_CACHES, ENGINE_TRACKED_FILES, SymbolIndexer, SymStoreIndexer, publish_version
-from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
-from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -35,7 +34,7 @@ def parse_arguments() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         help=("Scan and write Engine/Saved/changed_files.txt, but don't upload anything or update the symbol store"),
     )
-    add_s3_arguments(parser)
+    add_publish_store_arguments(parser)
     parser.add_argument("--disable-symbol-store-upload", action=argparse.BooleanOptionalAction)
     parser.add_argument("--symbol-store-path", type=str, help=("Path of the shared symbol store folder"))
     parser.add_argument(
@@ -44,7 +43,6 @@ def parse_arguments() -> argparse.Namespace:
         default=DEFAULT_KEEP_HASH_CACHES,
         help=f"Number of hash caches to retain in the bucket; older ones get deleted (default: {DEFAULT_KEEP_HASH_CACHES})",
     )
-    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"Number of parallel uploads (default: {DEFAULT_JOBS})")
 
     return parser.parse_args()
 
@@ -60,10 +58,7 @@ def main() -> None:
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
     project = workspace.project
-
-    if not project.is_native_project:
-        logger.fatal("You can only publish binaries for native projects")
-        exit(1)
+    store = open_publish_store(workspace, args)
 
     symbol_indexer: SymbolIndexer | None = None
     if args.disable_symbol_store_upload:
@@ -75,10 +70,6 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
         symbol_indexer = SymStoreIndexer(args.symbol_store_path, project.project_name)
 
     engine = workspace.engine
-
-    s3_settings = resolve_s3_settings(workspace.config, args)
-    store = PublishStore.from_settings(s3_settings, jobs=args.jobs)
-
     root = engine.root_path
     commit = get_current_sha(root)
 

@@ -29,11 +29,9 @@ from pathlib import Path
 from typing import TypeVar, cast
 
 import zstandard
-from gamedevtools.s3 import S3Client
 
 from uepyscripts import logger
-from uepyscripts.tools.ugs.s3_settings import S3Settings
-from uepyscripts.tools.ugs.storage import DryRunStorage, S3Storage, Storage
+from uepyscripts.tools.ugs.storage import Storage
 from uepyscripts.tools.ugs.ugs_types import HashCacheManifest, Manifest, VersionManifest
 
 MANIFESTS_PREFIX = "manifests/"
@@ -87,13 +85,10 @@ class PublishStore:
         self._jobs = max(1, jobs)
         self._compression_level = compression_level
 
-    @classmethod
-    def from_settings(cls, settings: S3Settings, jobs: int = DEFAULT_JOBS, dry_run: bool = False) -> "PublishStore":
-        client = S3Client(access_key=settings.access_key, secret_key=settings.secret_key, region=settings.bucket_region)
-        storage: Storage = S3Storage(client, settings.bucket_name)
-        if dry_run:
-            storage = DryRunStorage(storage)
-        return cls(storage, jobs=jobs)
+    @property
+    def jobs(self) -> int:
+        """How many transfers run in parallel."""
+        return self._jobs
 
     # ---- Versions -----------------------------------------------------
 
