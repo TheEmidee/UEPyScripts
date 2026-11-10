@@ -30,6 +30,16 @@ _Avoid_: config.ini (it may be several files), settings file
 One `[Section]` of the Project config, read as a single typed value the first time a command asks for it. Missing or malformed keys are all reported together.
 _Avoid_: config entry, settings group
 
+## BuildGraph
+
+**BuildGraph command**:
+One UAT BuildGraph invocation: the script, one target or one Single node, the project, script folders, properties, build-machine and shared-storage flags, and extra arguments that override generated ones with the same key.
+_Avoid_: buildgraph args, UAT arguments (when you mean the whole invocation)
+
+**Single node**:
+Running one node of a BuildGraph graph on its own, sharing its inputs and outputs with other agents through the shared storage folder. Only CI (`ue-ci-run-buildgraph`) runs Single nodes, one per task.
+_Avoid_: task (when you mean the BuildGraph node)
+
 ## Binary publishing (UGS)
 
 **Version**:
