@@ -485,6 +485,7 @@ def main() -> None:
         directories=[
             "Engine/Binaries/Win64",
             "Engine/Plugins",
+            "Engine/Platforms",
             "Engine/Intermediate/Build/BuildRules",
             "Engine/Intermediate/Build/Win64/**/",
             "Engine/Plugins/**/Intermediate/**/",
