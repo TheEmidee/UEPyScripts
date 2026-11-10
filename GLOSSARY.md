@@ -37,8 +37,16 @@ One UAT BuildGraph invocation: the script, one target or one Single node, the pr
 _Avoid_: buildgraph args, UAT arguments (when you mean the whole invocation)
 
 **Single node**:
-Running one node of a BuildGraph graph on its own, sharing its inputs and outputs with other agents through the shared storage folder. Only CI (`ue-ci-run-buildgraph`) runs Single nodes, one per task.
+Running one node of a BuildGraph graph on its own, sharing its inputs and outputs with other agents through the Shared storage. Only CI (`ue-ci-run-buildgraph`) runs Single nodes, one per task.
 _Avoid_: task (when you mean the BuildGraph node)
+
+**Build tag**:
+The name CI gives one build, such as `jenkins-42`. Every Single node of that build shares it.
+_Avoid_: build number, version (that is a published commit)
+
+**Shared storage**:
+The folder where the Single nodes of one build exchange their outputs: `[Jenkins] BuildgraphSharedStoragePath / <Build tag>`, with one subfolder per Single node. Deleted by `ue-ci-cleanup` once the build is over.
+_Avoid_: shared storage dir (when you mean the whole build's folder), NAS
 
 ## Binary publishing (UGS)
 
