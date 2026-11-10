@@ -18,15 +18,3 @@ def get_registry_value(hkey: int, key_path: str, value_name: str) -> Optional[Pa
         logger.fatal(f"An error occurred when trying to read {full_path}: {e}")
 
     return None
-
-
-def write_registry_value(hkey: int, key_path: str, value_name: str, value_data: str) -> bool:
-    full_path = f"{key_path}\\{value_name}"
-
-    try:
-        with winreg.CreateKey(hkey, key_path) as key:
-            winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, value_data)
-            return True
-    except Exception as e:
-        logger.fatal(f"An error occurred when trying to write {full_path}: {e}")
-        return False
