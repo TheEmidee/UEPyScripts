@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.4.5] - 2026-11-10
+
+### Fixed
+
+- Added folder "Engine/Platforms" to folders tracked by UGS.push ([#28](https://github.com/TheEmidee/JenkinsFileGenerator/issues/28))
+
+
 ## [1.4.4] - 2026-09-07
 
 ### Changed
