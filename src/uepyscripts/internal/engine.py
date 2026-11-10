@@ -5,7 +5,7 @@ from pathlib import Path
 from packaging.version import Version
 
 from uepyscripts import logger
-from uepyscripts.internal.engine_resolver import resolve_engine_path
+from uepyscripts.internal.engine_locator import EngineLocator
 from uepyscripts.internal.project import Project
 from uepyscripts.tools.subprocess import run_subprocess
 
@@ -105,7 +105,7 @@ class Engine:
 
 
 def resolve_engine(project: Project) -> Engine:
-    root_path = resolve_engine_path(project)
+    root_path = EngineLocator().locate(project)
 
     engine = Engine(project, root_path)
     logger.info(engine)

@@ -12,6 +12,13 @@ _Avoid_: context, session
 A project whose `.uproject` sits in a folder next to the engine's `Engine` folder, in the same source tree, with an empty `EngineAssociation`. The engine is that tree's root. Being native is a property of the folder layout, never a choice a command makes.
 _Avoid_: source build (when you mean the layout)
 
+**Engine association**:
+The `EngineAssociation` value of a `.uproject`: empty for a Native project, a launcher version such as `5.4`, the name of a registered build, or a path to an engine folder.
+
+**Engine locator**:
+Finds the engine root folder a project needs from its Engine association, trying in order: the Native project layout, a registered build, a launcher install, the association as a path, then `NODE_UE_ROOT`.
+_Avoid_: engine resolver
+
 ## Binary publishing (UGS)
 
 **Version**:
