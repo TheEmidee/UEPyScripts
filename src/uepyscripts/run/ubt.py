@@ -1,17 +1,16 @@
 import argparse
 
-from uepyscripts.context import engine
+from uepyscripts.internal.workspace import add_uproject_argument, open_workspace
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Execute different tasks based on command-line arguments.")
-    parser.add_argument("arguments", nargs="*", help="Extra arguments to pass to UBT")
+    parser = argparse.ArgumentParser(description="Run UBT. Every argument except --uproject-path is forwarded to UBT.", allow_abbrev=False)
+    add_uproject_argument(parser)
 
-    args: argparse.Namespace = parser.parse_args()
+    args, forwarded_arguments = parser.parse_known_args()
 
-    arguments: list[str] = args.arguments
-
-    return engine.ubt(arguments)
+    with open_workspace(args) as workspace:
+        return workspace.engine.ubt(forwarded_arguments)
 
 
 if __name__ == "__main__":

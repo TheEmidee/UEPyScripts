@@ -12,8 +12,7 @@ import argparse
 from dataclasses import dataclass
 
 from uepyscripts import logger
-from uepyscripts.internal.config import Config, resolve_config
-from uepyscripts.internal.project import Project
+from uepyscripts.internal.config import Config
 
 S3_CONFIG_SECTION = "UGS.AWS"
 
@@ -56,11 +55,10 @@ def read_config_value(config: Config, key: str) -> str | None:
     return value if value else None
 
 
-def resolve_s3_settings(project: Project, args: argparse.Namespace) -> S3Settings:
+def resolve_s3_settings(config: Config, args: argparse.Namespace) -> S3Settings:
     """Takes the S3 info from the config file, then lets the matching command
     line arguments override each value. Exits with an explicit report of what
     is missing rather than letting the first S3 call fail."""
-    config = resolve_config(project)
 
     values: dict[str, str] = {}
     missing: list[str] = []

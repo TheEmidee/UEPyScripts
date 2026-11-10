@@ -20,8 +20,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from uepyscripts import logger
-from uepyscripts.internal.engine import resolve_engine
-from uepyscripts.internal.project import resolve_project
+from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
 from uepyscripts.tools.ugs.git_utils import get_local_ancestry
 from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
 from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
@@ -98,7 +97,7 @@ def parse_arguments() -> argparse.Namespace:
             "and each value can be overridden by its command line argument."
         )
     )
-    parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
+    add_uproject_argument(parser)
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"Number of parallel downloads (default: {DEFAULT_JOBS})")
     add_s3_arguments(parser)
 
@@ -110,19 +109,20 @@ def main() -> None:
 
     logger.info("Syncing binaries...")
 
-    try:
-        project = resolve_project(args.uproject_path)
-    except Exception as e:
-        logger.fatal(f"Project resolution failed: {e}")
-        exit(1)
+    with open_workspace(args) as workspace:
+        run(workspace, args)
+
+
+def run(workspace: Workspace, args: argparse.Namespace) -> None:
+    project = workspace.project
 
     if not project.is_native_project:
         logger.fatal("You can only sync binaries for native projects")
         exit(1)
 
-    engine = resolve_engine(project)
+    engine = workspace.engine
 
-    s3_settings = resolve_s3_settings(project, args)
+    s3_settings = resolve_s3_settings(workspace.config, args)
     store = PublishStore.from_settings(s3_settings, jobs=args.jobs)
 
     root_folder = engine.root_path
