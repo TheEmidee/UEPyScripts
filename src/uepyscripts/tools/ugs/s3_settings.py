@@ -1,20 +1,19 @@
 """
 S3 connection info for the binary publish/sync tools.
 
-Values are read from the project's Config/PyScripts/config.ini (section
-[UGS.AWS]), and each one can be overridden by its command line argument.
-Having no config file at all is fine — the command line can provide
-everything — but a value that is missing from both sources is reported
-before any S3 call is attempted.
+Values are read from the [UGS.AWS] Config section of the Project config, and
+each one can be overridden by its command line argument. Having no Project
+config at all is fine — the command line can provide everything — but a value
+that is missing from both sources is reported before any S3 call is attempted.
 """
 
 import argparse
 from dataclasses import dataclass
 
 from uepyscripts import logger
-from uepyscripts.internal.config import Config
+from uepyscripts.internal.config import Config, UgsAwsSection
 
-S3_CONFIG_SECTION = "UGS.AWS"
+S3_CONFIG_SECTION = UgsAwsSection.section_name
 
 # (attribute, command line argument, config.ini key)
 S3_SETTINGS_FIELDS = [
@@ -45,27 +44,18 @@ def add_s3_arguments(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--s3-secret-key", type=str, help="AWS S3 Secret Key (config: AWS_SecretKey)")
 
 
-def read_config_value(config: Config, key: str) -> str | None:
-    """A missing config file, section or key are all treated the same way — no value."""
-    if not config.valid or not config.config.has_section(S3_CONFIG_SECTION):
-        return None
-
-    value = config[S3_CONFIG_SECTION].get(key)
-
-    return value if value else None
-
-
 def resolve_s3_settings(config: Config, args: argparse.Namespace) -> S3Settings:
     """Takes the S3 info from the config file, then lets the matching command
     line arguments override each value. Exits with an explicit report of what
     is missing rather than letting the first S3 call fail."""
 
+    ugs_aws = config.ugs_aws
     values: dict[str, str] = {}
     missing: list[str] = []
 
     for attribute, argument, config_key in S3_SETTINGS_FIELDS:
         argument_value = getattr(args, argument.lstrip("-").replace("-", "_"), None)
-        value = argument_value or read_config_value(config, config_key)
+        value = argument_value or getattr(ugs_aws, attribute)
 
         if value:
             values[attribute] = value

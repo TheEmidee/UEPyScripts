@@ -73,7 +73,7 @@ def test_config_is_readable_without_an_engine(tmp_path: Path) -> None:
 
     workspace = Workspace(uproject)
 
-    assert workspace.config["Jenkins"]["BuildgraphSharedStoragePath"] == "X"
+    assert workspace.config.jenkins.buildgraph_shared_storage_path == Path("X")
 
 
 def test_engine_is_resolved_lazily_and_cached(native_layout: Path) -> None:
@@ -136,6 +136,6 @@ def test_open_workspace_exits_on_missing_engine_inside_the_block(tmp_path: Path)
 def test_open_workspace_lets_other_errors_through(native_layout: Path) -> None:
     args, _ = uproject_args("--uproject-path", str(native_layout))
 
-    with pytest.raises(KeyError):
-        with open_workspace(args) as workspace:
-            _ = workspace.config["NoSuchSection"]
+    with pytest.raises(RuntimeError):
+        with open_workspace(args):
+            raise RuntimeError("not a WorkspaceError")

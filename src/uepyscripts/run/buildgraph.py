@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .. import logger
+from ..internal.config import ConfigError
 from ..internal.workspace import Workspace, add_uproject_argument, open_workspace
 
 
@@ -13,11 +14,14 @@ def run(workspace: Workspace, target: str, arguments: list[str], script: Optiona
 
     project = workspace.project
     config = workspace.config
+    project_section = config.project
 
     if script:
         buildgraph_path = Path(script)
+    elif project_section.buildgraph_path:
+        buildgraph_path = project_section.buildgraph_path
     else:
-        buildgraph_path = project.root_folder.joinpath(config["Project"]["BuildgraphPath"])
+        raise ConfigError("Project", ["BuildgraphPath: missing (or pass --script)"], config.folder)
     logger.info(f"Buildgraph XML path : {buildgraph_path}")
 
     if not buildgraph_path.exists():
@@ -36,32 +40,22 @@ def run(workspace: Workspace, target: str, arguments: list[str], script: Optiona
 
     uat_arguments.append(f"-Project={project.uproject_path}")
 
-    if config.valid:
-        automation_scripts_directories = config["Project"].get("AutomationScriptsDirectories")
-        if automation_scripts_directories == "" or automation_scripts_directories is None:
-            logger.info("No automation scripts directory is set")
-        else:
-            automation_scripts_paths = automation_scripts_directories.split("+")
+    if not project_section.automation_scripts_directories:
+        logger.info("No automation scripts directory is set")
 
-            for automation_scripts_path_str in automation_scripts_paths:
-                automation_scripts_path = Path(automation_scripts_path_str)
-                automation_scripts_path = project.root_folder.joinpath(automation_scripts_path)
-                if not automation_scripts_path.exists():
-                    logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
-                    continue
+    for automation_scripts_path in project_section.automation_scripts_directories:
+        if not automation_scripts_path.exists():
+            logger.warning(f"The automation scripts directory does not exist. Current value {automation_scripts_path}")
+            continue
 
-                logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
-                uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
+        logger.info(f"Automation Scripts directory set to {automation_scripts_path}")
+        uat_arguments.append(f"-ScriptDir={automation_scripts_path}")
 
-        shared_properties_str = config["Project"].get("BuildgraphSharedProperties", "")
-        if shared_properties_str == "" or shared_properties_str is None:
-            logger.info("No shared properties to set")
-        else:
-            shared_properties = dict(pair.split("=") for pair in shared_properties_str.split("+")) if shared_properties_str else {}
+    if not project_section.buildgraph_shared_properties:
+        logger.info("No shared properties to set")
 
-            if shared_properties is not None:
-                for key, value in shared_properties.items():
-                    uat_arguments.append(f"-set:{key}={value}")
+    for key, value in project_section.buildgraph_shared_properties.items():
+        uat_arguments.append(f"-set:{key}={value}")
 
     for arg in arguments:
         uat_arguments.append(arg)

@@ -19,6 +19,7 @@
 - [Installation](#installation-)
 - [Quick Start](#quick-start-)
 - [Usage Examples](#usage-examples-)
+- [Configuration](#configuration-)
 - [Continuous Integration](#continuous-integration-)
 - [Development & Testing](#development--testing-)
 - [Contribution Guide](#contribution-guide-)
@@ -81,6 +82,37 @@
   ```bash
     ue-generate-solution.exe
   ```
+
+## Configuration 🗂️
+
+Commands read the **Project config**: every `.ini` file in your project's `Config/PyScripts` folder. The files are merged in file-name order, so a later file overrides the same key in an earlier one (for example `config.ini`, then `config.local.ini`). Not having the folder is fine: a command only fails when it needs a key that isn't set, and the error lists every missing or malformed key of that section.
+
+- Keys are case-insensitive. `Key =` with nothing after it counts as not set.
+- Lists use `+` as the separator.
+- Relative paths are resolved against the folder that holds the `.uproject` file.
+- Sections and keys not listed here are ignored.
+
+```ini
+[Project]
+; BuildGraph XML used by ue-run-buildgraph when --script isn't passed
+BuildgraphPath = Build/BuildGraph.xml
+; Extra automation script folders passed to UAT as -ScriptDir (missing folders are skipped with a warning)
+AutomationScriptsDirectories = Build/Scripts+Plugins/MyPlugin/Build/Scripts
+; Properties passed to BuildGraph as -set:Name=Value (split on the first =)
+BuildgraphSharedProperties = Clean=False+Targets=MyGameEditor
+
+[Jenkins]
+; Shared storage used by ue-ci-run-buildgraph and ue-ci-cleanup (required by both)
+BuildgraphSharedStoragePath = \\nas\cache\UE-BuildGraph
+
+[UGS.AWS]
+; Used by ue-ugs-push, ue-ugs-pull and ue-ugs-cleanup.
+; Each value can be overridden on the command line (--s3-bucket-name, --s3-bucket-region, --s3-access-key, --s3-secret-key)
+AWS_BucketName = my-bucket
+AWS_Region = eu-west-1
+AWS_AccessKey = ...
+AWS_SecretKey = ...
+```
 
 ## Continuous Integration ⚙️
 

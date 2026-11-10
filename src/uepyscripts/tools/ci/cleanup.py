@@ -1,7 +1,6 @@
 import argparse
 import shutil
 import socket
-from pathlib import Path
 from typing import Optional, Sequence
 
 from ... import logger
@@ -19,7 +18,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 
 def delete_buildgraph_shared_storage_directory(config: Config, build_tag: str) -> None:
-    shared_storage_dir = Path(f"{config['Jenkins']['BuildgraphSharedStoragePath']}\\{build_tag}")
+    shared_storage_dir = config.jenkins.buildgraph_shared_storage_path / build_tag
 
     logger.info(f"Delete Buildgraph Shared Storage directory: {shared_storage_dir}")
     shutil.rmtree(shared_storage_dir, ignore_errors=True)

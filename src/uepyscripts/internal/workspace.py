@@ -20,11 +20,10 @@ from typing import Optional
 from uepyscripts import logger
 from uepyscripts.internal.config import Config, resolve_config
 from uepyscripts.internal.engine import Engine, resolve_engine
+from uepyscripts.internal.errors import WorkspaceError
 from uepyscripts.internal.project import Project, resolve_project
 
-
-class WorkspaceError(Exception):
-    """Base class for everything that can go wrong while resolving a Workspace."""
+__all__ = ["EngineNotFoundError", "ProjectNotFoundError", "Workspace", "WorkspaceError", "add_uproject_argument", "open_workspace"]
 
 
 class ProjectNotFoundError(WorkspaceError):
