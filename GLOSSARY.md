@@ -19,6 +19,14 @@ The `EngineAssociation` value of a `.uproject`: empty for a Native project, a la
 Finds the engine root folder a project needs from its Engine association, trying in order: the Native project layout, a registered build, a launcher install, the association as a path, then `NODE_UE_ROOT`.
 _Avoid_: engine resolver
 
+**Project config**:
+The `.ini` files in the project's `Config/PyScripts` folder, merged in file-name order. A missing folder is an empty Project config.
+_Avoid_: config.ini (it may be several files), settings file
+
+**Config section**:
+One `[Section]` of the Project config, read as a single typed value the first time a command asks for it. Missing or malformed keys are all reported together.
+_Avoid_: config entry, settings group
+
 ## Binary publishing (UGS)
 
 **Version**:

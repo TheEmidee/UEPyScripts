@@ -128,7 +128,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             logger.info("The flag --no-single-node was passed. Run the task with Target and not with SingleNode")
             default_arguments += [f"--target={args.target}"]
         else:
-            shared_storage_dir = Path(workspace.config["Jenkins"]["BuildgraphSharedStoragePath"]) / args.build_tag
+            shared_storage_dir = workspace.config.jenkins.buildgraph_shared_storage_path / args.build_tag
             logger.info(f"Shared storage directory: {shared_storage_dir}")
 
             remove_task_shared_storage_dir(shared_storage_dir, args.target)
