@@ -2,6 +2,16 @@
 
 Build, CI and binary-distribution tooling for Unreal Engine projects that ship with a source-built (native) engine.
 
+## Workspace
+
+**Workspace**:
+The project, its config and its engine, resolved together from one uproject. The single starting point for every command.
+_Avoid_: context, session
+
+**Native project**:
+A project whose `.uproject` sits in a folder next to the engine's `Engine` folder, in the same source tree, with an empty `EngineAssociation`. The engine is that tree's root. Being native is a property of the folder layout, never a choice a command makes.
+_Avoid_: source build (when you mean the layout)
+
 ## Binary publishing (UGS)
 
 **Version**:
