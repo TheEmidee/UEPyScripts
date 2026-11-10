@@ -64,3 +64,11 @@ Per-file fingerprints recorded at a commit so the next publish can skip re-hashi
 **Publish store**:
 The Manifests, Blobs, Hash caches and symbol-store manifest kept in the bucket, treated as one thing.
 _Avoid_: bucket (when you mean its contents), binary cache
+
+**Sync**:
+Making the local engine tree match one Version's Manifest: downloading the files whose hash differs from the Sync state and deleting the ones no longer tracked. The target is the nearest Version in HEAD's ancestry, or the latest Version when none is (history was rewritten).
+_Avoid_: pull (that is the command), download (that is one step)
+
+**Sync state**:
+The Version and Manifest the last completed Sync wrote, kept at the engine root. Local files are trusted to match it and are never hashed. It is only written once every file of a Sync has been written, and an unreadable one counts as no previous Sync.
+_Avoid_: local state, sync-state.json (that is the file)
