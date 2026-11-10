@@ -24,7 +24,7 @@ from uepyscripts.internal.workspace import Workspace, add_uproject_argument, ope
 from uepyscripts.tools.ugs.git_utils import get_local_ancestry
 from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
 from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
-from uepyscripts.tools.ugs.ugs_types import Manifest
+from uepyscripts.tools.ugs.ugs_types import Manifest, diff_manifests
 
 # ---- CONFIG ----------------------------------------------------------
 
@@ -49,13 +49,6 @@ class LocalStateManager:
         self.path.write_text(json.dumps(self.data, indent=2))
 
 
-def compute_sync(local: Manifest, target: Manifest) -> tuple[list[str], list[str]]:
-    """Files to download and files to delete to go from `local` to `target`."""
-    to_download = [p for p, h in target.items() if local.get(p) != h]
-    to_delete = [p for p in local if p not in target]
-    return to_download, to_delete
-
-
 def warn_if_source_dirty(root_folder: Path) -> None:
     result = subprocess.run(
         ["git", "status", "--porcelain", "--", "Engine/Source"],
@@ -75,7 +68,7 @@ def sync(store: PublishStore, root_folder: Path, target_version: str, state: Loc
     logger.info("=== Start syncing binaries ===")
 
     target = store.manifest(target_version)
-    to_download, to_delete = compute_sync(state.get("manifest", {}), target)
+    to_download, to_delete = diff_manifests(state.get("manifest", {}), target)
 
     logger.info(f"{len(to_download)} file(s) to download, {len(to_delete)} to delete")
 
