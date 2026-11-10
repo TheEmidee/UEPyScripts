@@ -19,6 +19,9 @@ The `EngineAssociation` value of a `.uproject`: empty for a Native project, a la
 Finds the engine root folder a project needs from its Engine association, trying in order: the Native project layout, a registered build, a launcher install, the association as a path, then `NODE_UE_ROOT`.
 _Avoid_: engine resolver
 
+**Engine tool**:
+A program inside the engine that a command launches: UAT (`RunUAT.bat`), UBT (`UnrealBuildTool.exe`), `Build.bat`, or the editor (`UnrealEditor.exe`). It may not exist yet in a freshly cloned engine.
+
 **Project config**:
 The `.ini` files in the project's `Config/PyScripts` folder, merged in file-name order. A missing folder is an empty Project config.
 _Avoid_: config.ini (it may be several files), settings file
