@@ -23,8 +23,7 @@ from typing import cast
 import blake3
 
 from uepyscripts import logger
-from uepyscripts.internal.engine import resolve_engine
-from uepyscripts.internal.project import resolve_project
+from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
 from uepyscripts.tools.ugs.git_utils import (
     ANCESTRY_LOOKBACK,
     get_current_branch,
@@ -287,7 +286,7 @@ def parse_arguments() -> argparse.Namespace:
             "and each value can be overridden by its command line argument."
         )
     )
-    parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
+    add_uproject_argument(parser)
     parser.add_argument(
         "--skip-upload",
         action=argparse.BooleanOptionalAction,
@@ -317,19 +316,20 @@ def main() -> None:
 
     logger.info("Publish binaries...")
 
-    try:
-        project = resolve_project(args.uproject_path)
-    except Exception as e:
-        logger.fatal(f"Project resolution failed: {e}")
-        exit(1)
+    with open_workspace(args) as workspace:
+        run(workspace, args)
+
+
+def run(workspace: Workspace, args: argparse.Namespace) -> None:
+    project = workspace.project
 
     if not project.is_native_project:
         logger.fatal("You can only publish binaries for native projects")
         exit(1)
 
-    engine = resolve_engine(project)
+    engine = workspace.engine
 
-    s3_settings = resolve_s3_settings(project, args)
+    s3_settings = resolve_s3_settings(workspace.config, args)
     store = PublishStore.from_settings(s3_settings, jobs=args.jobs)
 
     cfg = FilesConfiguration(

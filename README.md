@@ -141,11 +141,11 @@ A typical usage of this module in a jenkins pipeline script would look like:
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
-            "module": "uepyscripts.tools.ue.copy_engine_buildgraph_tasks",
+            "module": "uepyscripts.tools.ue.compile_editor",
             "cwd": "ABSOLUTE_PATH_TO_PROJECT",
             "console": "integratedTerminal",
             "args": [
-                "--uproject_path=D:\\PATH_TO_UPROJECT.uproject"
+                "--uproject-path=D:\\PATH_TO_UPROJECT.uproject"
             ]
         }
     ]

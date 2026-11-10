@@ -14,11 +14,9 @@ anything; this is the only place that does.
 
 import argparse
 from datetime import timedelta
-from pathlib import Path
 
 from uepyscripts import logger
-from uepyscripts.internal.engine import resolve_engine
-from uepyscripts.internal.project import resolve_project
+from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
 from uepyscripts.tools.ugs.git_utils import get_remote_branch_ancestries, is_shallow_repository
 from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
 from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
@@ -42,7 +40,7 @@ def parse_arguments() -> argparse.Namespace:
             "and each value can be overridden by its command line argument."
         )
     )
-    parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
+    add_uproject_argument(parser)
     add_s3_arguments(parser)
     parser.add_argument("--remote", type=str, default="origin", help="Git remote to check branches against (default: origin)")
     parser.add_argument("--keep-versions", type=int, default=30, help="Published versions to keep per remote branch (default: 30)")
@@ -68,23 +66,24 @@ def main() -> None:
 
     logger.info("Cleanup published binaries...")
 
-    try:
-        project = resolve_project(args.uproject_path)
-    except Exception as e:
-        logger.fatal(f"Project resolution failed: {e}")
-        exit(1)
+    with open_workspace(args) as workspace:
+        run(workspace, args)
+
+
+def run(workspace: Workspace, args: argparse.Namespace) -> None:
+    project = workspace.project
 
     if not project.is_native_project:
         logger.fatal("You can only clean up binaries for native projects")
         exit(1)
 
-    engine = resolve_engine(project)
+    engine = workspace.engine
 
     if is_shallow_repository(engine.root_path):
         logger.fatal("This is a shallow clone: published commits beyond its depth would look unreachable and get deleted. Run from a full clone.")
         exit(1)
 
-    s3_settings = resolve_s3_settings(project, args)
+    s3_settings = resolve_s3_settings(workspace.config, args)
     store = PublishStore.from_settings(s3_settings, jobs=args.jobs, dry_run=args.dry_run)
 
     logger.info(f"Fetching '{args.remote}' and computing the ancestry of each branch")

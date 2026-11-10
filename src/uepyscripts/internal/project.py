@@ -98,9 +98,9 @@ def resolve_project(uproject_path: Optional[Path] = None) -> Project:
         dir_path = Path.cwd()
         uproject_path = find_parent_with_project_file(dir_path)
         if not uproject_path:
-            raise Exception(f"Could not find a uproject file from {dir_path}")
+            raise FileNotFoundError(f"Could not find a uproject file from {dir_path}")
     elif not uproject_path.exists():
-        raise Exception(f"{uproject_path} is not a valid file")
+        raise FileNotFoundError(f"{uproject_path} is not a valid file")
 
     logger.debug(f"Found uproject file at {uproject_path}")
     project = Project(uproject_path)

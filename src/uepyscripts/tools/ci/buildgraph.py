@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from ... import logger
-from ...context import config, project
+from ...internal.project import Project
+from ...internal.workspace import add_uproject_argument, open_workspace
 from ...run import buildgraph
 
 
@@ -58,6 +59,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
         action="store_true",
         help="Set this flag to not use SingleNode but use Target. This also disables using the shared storage dir.",
     )
+    add_uproject_argument(parser)
 
     args, unknown_args = parser.parse_known_args(argv)
     return args, unknown_args
@@ -69,7 +71,7 @@ def remove_task_shared_storage_dir(shared_storage_dir: Path, task_name: str) -> 
     shutil.rmtree(task_shared_storage_dir, ignore_errors=True)
 
 
-def try_delete_local_buildgraph_folder(build_tag: str) -> None:
+def try_delete_local_buildgraph_folder(project: Project, build_tag: str) -> None:
     if not project.project_folders.saved.exists():
         logger.info(f"Project saved folder does not exist: {project.project_folders.saved}. Creating it")
         os.makedirs(project.project_folders.saved, exist_ok=True)
@@ -99,7 +101,7 @@ def try_delete_local_buildgraph_folder(build_tag: str) -> None:
         write_tag_to_file()
 
 
-def cleanup_local_folder() -> None:
+def cleanup_local_folder(project: Project) -> None:
     def remove_folder(folder: Path) -> None:
         if folder.exists():
             logger.info(f"Removing folder: {folder}")
@@ -121,22 +123,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     default_arguments: list[str] = ["-BuildMachine", "-NoP4"]
 
-    if args.no_single_node:
-        logger.info("The flag --no-single-node was passed. Run the task with Target and not with SingleNode")
-        default_arguments += [f"--target={args.target}"]
-    else:
-        shared_storage_dir = Path(config["Jenkins"]["BuildgraphSharedStoragePath"]) / args.build_tag
-        logger.info(f"Shared storage directory: {shared_storage_dir}")
+    with open_workspace(args) as workspace:
+        if args.no_single_node:
+            logger.info("The flag --no-single-node was passed. Run the task with Target and not with SingleNode")
+            default_arguments += [f"--target={args.target}"]
+        else:
+            shared_storage_dir = Path(workspace.config["Jenkins"]["BuildgraphSharedStoragePath"]) / args.build_tag
+            logger.info(f"Shared storage directory: {shared_storage_dir}")
 
-        remove_task_shared_storage_dir(shared_storage_dir, args.target)
-        try_delete_local_buildgraph_folder(args.build_tag)
-        cleanup_local_folder()
+            remove_task_shared_storage_dir(shared_storage_dir, args.target)
+            try_delete_local_buildgraph_folder(workspace.project, args.build_tag)
+            cleanup_local_folder(workspace.project)
 
-        default_arguments += [f"-SharedStorageDir={shared_storage_dir}", "-WriteToSharedStorage", f"-SingleNode={args.target}"]
+            default_arguments += [f"-SharedStorageDir={shared_storage_dir}", "-WriteToSharedStorage", f"-SingleNode={args.target}"]
 
-    updated_args = update_or_add_argument(unknown_args, default_arguments)
+        updated_args = update_or_add_argument(unknown_args, default_arguments)
 
-    return buildgraph.main(updated_args)
+        # The extra BuildGraph arguments still go through run.buildgraph's parser as strings,
+        # but the Workspace is resolved once, here, and handed over.
+        buildgraph_args, buildgraph_other_arguments = buildgraph.parse_arguments(updated_args)
+        buildgraph.validate_config(buildgraph_args.target, buildgraph_other_arguments, buildgraph_args.script, args.uproject_path)
+
+        return buildgraph.run(workspace, buildgraph_args.target, buildgraph_other_arguments, buildgraph_args.script)
 
 
 if __name__ == "__main__":

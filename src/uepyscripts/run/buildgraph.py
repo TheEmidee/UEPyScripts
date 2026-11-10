@@ -4,18 +4,15 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .. import logger
-from ..internal.config import resolve_config
-from ..internal.engine import resolve_engine
-from ..internal.project import resolve_project
+from ..internal.workspace import Workspace, add_uproject_argument, open_workspace
 
 
-def run(target: str, arguments: list[str], script: Optional[str] = None, uproject_path: Optional[str] = None) -> int:
+def run(workspace: Workspace, target: str, arguments: list[str], script: Optional[str] = None) -> int:
     logger.info(f"Run Buildgraph - Target : {target}")
     logger.info(f"Arguments : {arguments}")
 
-    project = resolve_project(Path(uproject_path) if uproject_path else None)
-    engine = resolve_engine(project)
-    config = resolve_config(project)
+    project = workspace.project
+    config = workspace.config
 
     if script:
         buildgraph_path = Path(script)
@@ -69,7 +66,7 @@ def run(target: str, arguments: list[str], script: Optional[str] = None, uprojec
     for arg in arguments:
         uat_arguments.append(arg)
 
-    return engine.uat(uat_arguments)
+    return workspace.engine.uat(uat_arguments)
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
@@ -79,16 +76,11 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     parser.add_argument(
         "--script", type=str, default=None, help="Path to the buildgraph XML file. If not set, resolved from the project configuration."
     )
-    parser.add_argument(
-        "--uproject",
-        type=str,
-        default=None,
-        help="Path to the .uproject file. Required when --script is set; otherwise auto-discovered from the current directory.",
-    )
+    add_uproject_argument(parser)
     return parser.parse_known_args(argv)
 
 
-def validate_config(target: str, arguments: list[str], script: Optional[str], uproject_path: Optional[str]) -> None:
+def validate_config(target: str, arguments: list[str], script: Optional[str], uproject_path: Optional[Path]) -> None:
     """Validate the configuration values."""
     pattern = r'-SingleNode=[^"]*'
 
@@ -96,7 +88,7 @@ def validate_config(target: str, arguments: list[str], script: Optional[str], up
         raise ValueError("Target is required")
 
     if script and not uproject_path:
-        raise ValueError("--uproject is required when --script is set")
+        raise ValueError("--uproject-path is required when --script is set")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -109,16 +101,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     try:
         logger.info("Validating configuration")
-        validate_config(target, other_arguments, args.script, args.uproject)
+        validate_config(target, other_arguments, args.script, args.uproject_path)
     except (ValueError, TypeError) as e:
         logger.error(f"Configuration validation failed: {e}")
         raise e
 
-    try:
-        return run(target, other_arguments, args.script, args.uproject)
-    except Exception as e:
-        logger.error(f"Execution failed: {e}")
-        raise e
+    with open_workspace(args) as workspace:
+        try:
+            return run(workspace, target, other_arguments, args.script)
+        except Exception as e:
+            logger.error(f"Execution failed: {e}")
+            raise e
 
 
 if __name__ == "__main__":
