@@ -45,7 +45,8 @@ dependencies = [
   "invoke",
   "types-invoke",
   "GameDevTools",
-  "blake3"
+  "blake3",
+  "zstandard"
 ]
 
 urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
@@ -67,7 +68,11 @@ dist = [
   "towncrier"
 ]
 
-dev = ["UEPyScripts[lint, dist]"]
+test = [
+  "pytest"
+]
+
+dev = ["UEPyScripts[lint, dist, test]"]
 
 [tool.ruff]
 line-length = 150
@@ -90,6 +95,9 @@ fixable = ["ALL"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.12"

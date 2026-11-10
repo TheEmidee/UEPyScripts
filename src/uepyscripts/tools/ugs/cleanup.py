@@ -1,59 +1,58 @@
 """
-Prunes S3 data for commits whose branch no longer exists on the remote.
+Retention for the Publish store (see publish_store.py). Push never deletes
+anything; this is the only place that does.
 
-  - A commit is "orphaned" once it is no longer reachable from any current
-    remote branch tip (i.e. its branch was deleted). This needs no per-branch
-    bookkeeping in S3 — reachability is computed straight from git, the same
-    way push.py/pull.py resolve diff baselines and sync targets.
-  - Deletes manifests/{sha}.json, deltas/{sha}.7z and checkpoints/{sha}.7z for
-    every orphaned sha, then rewrites index.json/checkpoints.json to drop them.
+  - Keeps the newest --keep-versions Versions along each remote branch's
+    ancestry. Every other Version is removed: the ones beyond that window,
+    and the ones no current remote branch can reach (their branch was
+    deleted). This needs no per-branch bookkeeping in the bucket — it is
+    computed straight from git.
+  - Then deletes every Blob no remaining Manifest references, once it is older
+    than --blob-grace-hours (so Blobs of a push still in progress survive).
   - Intended to run on a schedule (e.g. a periodic Jenkins job).
 """
 
 import argparse
-import json
+from datetime import timedelta
 from pathlib import Path
-from typing import cast
-
-from gamedevtools.s3 import S3Client
 
 from uepyscripts import logger
 from uepyscripts.internal.engine import resolve_engine
 from uepyscripts.internal.project import resolve_project
-from uepyscripts.tools.ugs.git_utils import get_remote_reachable_shas
+from uepyscripts.tools.ugs.git_utils import get_remote_branch_ancestries, is_shallow_repository
+from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
+from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
 
 
-class Context:
-    def __init__(self, args: argparse.Namespace) -> None:
-        self.args = args
-        self.s3_client: S3Client = S3Client(
-            access_key=args.s3_access_key,
-            secret_key=args.s3_secret_key,
-            region=args.s3_bucket_region,
-        )
-
-
-def build_orphaned_keys(orphaned: list[str]) -> list[str]:
-    """S3 keys to delete for each orphaned sha. Including a key that was never
-    written is harmless — S3 batch-delete is a no-op for missing keys, the same
-    assumption prune_old_versions (push.py) already relies on."""
-    keys: list[str] = []
-    for sha in orphaned:
-        keys.append(f"manifests/{sha}.json")
-        keys.append(f"deltas/{sha}.7z")
-        keys.append(f"checkpoints/{sha}.7z")
-    return keys
+def select_versions_to_keep(published: set[str], branch_ancestries: dict[str, list[str]], keep: int) -> set[str]:
+    """The newest `keep` published commits along each branch's ancestry (tip first)."""
+    kept: set[str] = set()
+    for ancestry in branch_ancestries.values():
+        on_branch = [sha for sha in ancestry if sha in published]
+        kept.update(on_branch[:keep])
+    return kept
 
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Delete S3 binary-publish data for branches that no longer exist on the remote.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Delete published binaries that are no longer needed. "
+            f"The S3 info is read from the [{S3_CONFIG_SECTION}] section of Config/PyScripts/config.ini, "
+            "and each value can be overridden by its command line argument."
+        )
+    )
     parser.add_argument("--uproject-path", type=Path, help=("Path to a native uproject file"))
-    parser.add_argument("--s3-bucket-name", type=str, help=("AWS S3 Bucket Name"))
-    parser.add_argument("--s3-bucket-region", type=str, help=("AWS S3 Bucket Region"))
-    parser.add_argument("--s3-access-key", type=str, help=("AWS S3 Access Key"))
-    parser.add_argument("--s3-secret-key", type=str, help=("AWS S3 Secret Key"))
+    add_s3_arguments(parser)
     parser.add_argument("--remote", type=str, default="origin", help="Git remote to check branches against (default: origin)")
+    parser.add_argument("--keep-versions", type=int, default=30, help="Published versions to keep per remote branch (default: 30)")
+    parser.add_argument(
+        "--blob-grace-hours",
+        type=float,
+        default=24,
+        help="Never delete a blob younger than this, even if no version references it (default: 24)",
+    )
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"Number of parallel manifest downloads (default: {DEFAULT_JOBS})")
     parser.add_argument(
         "--dry-run",
         action=argparse.BooleanOptionalAction,
@@ -67,7 +66,7 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     args = parse_arguments()
 
-    logger.info("Cleanup orphaned binary publishes...")
+    logger.info("Cleanup published binaries...")
 
     try:
         project = resolve_project(args.uproject_path)
@@ -75,51 +74,36 @@ def main() -> None:
         logger.fatal(f"Project resolution failed: {e}")
         exit(1)
 
-    engine = resolve_engine(project)
-    context = Context(args)
-
-    logger.info(f"Fetching '{args.remote}' and computing reachable commits")
-    reachable = get_remote_reachable_shas(engine.root_path, args.remote)
-
-    if not reachable:
-        logger.fatal(f"No commit is reachable from any branch on remote '{args.remote}' — aborting without deleting anything")
+    if not project.is_native_project:
+        logger.fatal("You can only clean up binaries for native projects")
         exit(1)
 
-    logger.info("Download index.json")
-    index = cast(list[str], context.s3_client.download_json(context.args.s3_bucket_name, "index.json", default=[]))
+    engine = resolve_engine(project)
 
-    logger.info("Download checkpoints.json")
-    checkpoints = cast(list[str], context.s3_client.download_json(context.args.s3_bucket_name, "checkpoints.json", default=[]))
+    if is_shallow_repository(engine.root_path):
+        logger.fatal("This is a shallow clone: published commits beyond its depth would look unreachable and get deleted. Run from a full clone.")
+        exit(1)
 
-    orphaned = [sha for sha in index if sha not in reachable]
+    s3_settings = resolve_s3_settings(project, args)
+    store = PublishStore.from_settings(s3_settings, jobs=args.jobs, dry_run=args.dry_run)
 
-    if not orphaned:
-        logger.info(f"Nothing to clean up. {len(index)} published commit(s), all reachable from '{args.remote}'.")
-        return
+    logger.info(f"Fetching '{args.remote}' and computing the ancestry of each branch")
+    branch_ancestries = get_remote_branch_ancestries(engine.root_path, args.remote)
 
-    logger.info(f"Found {len(orphaned)} orphaned commit(s) out of {len(index)} published")
+    if not branch_ancestries:
+        logger.fatal(f"No branch found on remote '{args.remote}' — aborting without deleting anything")
+        exit(1)
 
-    keys = build_orphaned_keys(orphaned)
+    published = store.versions()
+    kept = select_versions_to_keep(published, branch_ancestries, args.keep_versions)
+    to_remove = published - kept
 
-    if args.dry_run:
-        logger.info(f"[dry-run] Would delete {len(keys)} key(s):")
-        for key in keys:
-            logger.info(f"[dry-run]   {key}")
-        return
+    logger.info(f"{len(published)} published version(s): keeping {len(kept)}, removing {len(to_remove)}")
 
-    context.s3_client.delete_keys(context.args.s3_bucket_name, keys)
+    result = store.prune(to_remove, blob_grace=timedelta(hours=args.blob_grace_hours))
 
-    orphaned_set = set(orphaned)
-    index = [sha for sha in index if sha not in orphaned_set]
-    checkpoints = [sha for sha in checkpoints if sha not in orphaned_set]
-
-    logger.info("Upload index.json")
-    context.s3_client.upload_bytes(context.args.s3_bucket_name, "index.json", json.dumps(index).encode(), content_type="application/json")
-
-    logger.info("Upload checkpoints.json")
-    context.s3_client.upload_bytes(context.args.s3_bucket_name, "checkpoints.json", json.dumps(checkpoints).encode(), content_type="application/json")
-
-    logger.info(f"Cleanup done. Deleted {len(keys)} key(s) for {len(orphaned)} orphaned commit(s).")
+    prefix = "[dry-run] Would have removed" if args.dry_run else "Removed"
+    logger.info(f"{prefix} {len(result.removed_versions)} version(s) and {result.deleted_blobs} blob(s).")
 
 
 if __name__ == "__main__":

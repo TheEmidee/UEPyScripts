@@ -85,26 +85,23 @@ def _log_ancestry(cwd: Path, limit: int) -> list[str]:
     return out.splitlines()
 
 
-def get_remote_reachable_shas(cwd: Path, remote: str = "origin") -> set[str]:
-    """All commit SHAs reachable from any current branch tip on `remote`, after
-    pruning local remote-tracking refs for branches deleted on the remote."""
+def get_remote_branch_ancestries(cwd: Path, remote: str = "origin") -> dict[str, list[str]]:
+    """Every branch on `remote`, mapped to the commits reachable from its tip
+    (tip first), after pruning local remote-tracking refs for branches deleted
+    on the remote."""
     subprocess.run(["git", "fetch", "--prune", remote], cwd=cwd, check=True, capture_output=True, text=True)
-    out = subprocess.check_output(["git", "rev-list", f"--remotes={remote}"], cwd=cwd, text=True)
-    return set(out.splitlines())
+    refs = subprocess.check_output(
+        ["git", "for-each-ref", "--format=%(refname)%09%(symref)", f"refs/remotes/{remote}/"],
+        cwd=cwd,
+        text=True,
+    ).splitlines()
 
+    ancestries: dict[str, list[str]] = {}
+    for line in refs:
+        ref, _, symref = line.partition("	")
+        if symref:  # refs/remotes/origin/HEAD points at another branch
+            continue
+        out = subprocess.check_output(["git", "rev-list", ref], cwd=cwd, text=True)
+        ancestries[ref.removeprefix(f"refs/remotes/{remote}/")] = out.splitlines()
 
-def resolve_nearest_published_ancestor(index: list[str], ancestry: list[str]) -> tuple[str | None, bool]:
-    """Finds the nearest ancestor SHA (including HEAD itself) present in the
-    index. Returns None if nothing has ever been published reachable from HEAD
-    within the walked ancestry. The bool is True when the match was found by
-    walking the ancestry itself (an exact match), False when falling back to
-    the most recent published version because nothing in the ancestry matched."""
-    index_set = set(index)
-    for sha in ancestry:
-        if sha in index_set:
-            return sha, True
-
-    if index:
-        return index[-1], False
-
-    return None, True
+    return ancestries
