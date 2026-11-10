@@ -10,8 +10,7 @@ def main() -> None:
     args = parser.parse_args()
 
     with open_workspace(args) as workspace:
-        project = workspace.project
-        if workspace.engine.ubt(["-projectfiles", f"-project={project.uproject_path}", "-game", "-rocket", "-progress"]) != 0:
+        if workspace.engine.generate_project_files() != 0:
             print("Failed to generate project files.")
             sys.exit(1)
 

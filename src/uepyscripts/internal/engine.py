@@ -1,75 +1,69 @@
 import json
-import subprocess
 from pathlib import Path
+from typing import Optional
 
 from packaging.version import Version
 
 from uepyscripts import logger
 from uepyscripts.internal.engine_locator import EngineLocator
+from uepyscripts.internal.process import PopenRunner, ProcessRunner
 from uepyscripts.internal.project import Project
-from uepyscripts.tools.subprocess import run_subprocess
 
 
 class Engine:
-    class Runner:
-        def __init__(self, path: Path, capture_output: bool, wait_process: bool = True, extra_args: list[str] = []) -> None:
-            if not path.exists():
-                logger.warning(f"The file {path} does not exist")
-                return
+    """The engine a project uses: where it is, its version, and its Engine tools.
 
-            self.path = path.resolve()
-            self.capture_output = capture_output
-            self.wait_process = wait_process
-            self.extra_args = extra_args
+    Executables are never checked up front (a freshly cloned engine may not have
+    built UnrealBuildTool.exe yet). A tool the OS can't start raises
+    EngineToolNotStartedError when it is launched."""
 
-        def run(self, args: list[str] = []) -> int:
-            logger.debug(f"run process for {self.path} with arguments {args}")
-
-            try:
-                all_args = [str(self.path)]
-
-                if self.extra_args is not None:
-                    all_args += self.extra_args
-
-                if args is not None:
-                    all_args += args
-
-                return run_subprocess(all_args, self.capture_output)
-
-            except subprocess.CalledProcessError as e:
-                logger.fatal(f"Error occured when running {self.path}. ")
-                logger.fatal(f"Error occurred: {e}")
-                logger.fatal(f"Error code: {e.returncode}")
-                logger.fatal(f"Stderr: {e.stderr}")
-
-                return -1
-
-    def __init__(self, project: Project, root_path: Path) -> None:
+    def __init__(self, project: Project, root_path: Path, runner: Optional[ProcessRunner] = None) -> None:
         self.project = project
         self.root_path = root_path
         self.path = self.root_path.joinpath("Engine").resolve()
         self.build_path = self.path.joinpath("Build").resolve()
-        self.batchfiles_path = self.build_path.joinpath("BatchFiles").resolve()
         self.saved_path = self.path.joinpath("Saved").resolve()
         self.version = self.get_version_number()
-        self.uat_path = self.Runner(self.batchfiles_path.joinpath("RunUAT.bat"), True)
-        self.ubt_path = self.Runner(
-            self.path.joinpath("Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"), True, True, [str(self.project.uproject_path)]
+
+        self._runner: ProcessRunner = runner if runner is not None else PopenRunner()
+        batch_files = self.build_path / "BatchFiles"
+        self._uat = batch_files / "RunUAT.bat"
+        self._build_bat = batch_files / "Build.bat"
+        self._ubt = self.path / "Binaries" / "DotNET" / "UnrealBuildTool" / "UnrealBuildTool.exe"
+        self._editor = self.path / "Binaries" / "Win64" / "UnrealEditor.exe"
+
+    def uat(self, args: list[str]) -> int:
+        """Run UAT with exactly these arguments. Returns its exit code."""
+        return self._runner.run([str(self._uat), *args])
+
+    def ubt(self, args: list[str]) -> int:
+        """Run UBT with the uproject path followed by these arguments. Returns its exit code."""
+        return self._runner.run([str(self._ubt), str(self.project.uproject_path), *args])
+
+    def compile_editor(self) -> int:
+        """Build the project's editor target (Win64 Development). Returns Build.bat's exit code."""
+        project = self.project
+        return self._runner.run(
+            [
+                str(self._build_bat),
+                f"{project.project_name}Editor",
+                "Win64",
+                "Development",
+                f"-project={project.uproject_path}",
+                "-WaitMutex",
+                "-FromMsBuild",
+                f"-log={project.root_folder}/Saved/Logs/Compile_Editor_Development_Win64.log",
+            ]
         )
-        self.build_bat_path = self.Runner(self.batchfiles_path.joinpath("Build.bat"), True)
-        self.editor_exe_path = self.Runner(self.path.joinpath("Binaries/Win64/UnrealEditor.exe"), False, False, [str(self.project.uproject_path)])
 
-    def uat(self, args: list[str] = []) -> int:
-        return self.uat_path.run(args)
+    def generate_project_files(self) -> int:
+        """Generate the IDE project files. Goes through Build.bat, which builds UBT
+        first, so it works on a freshly cloned engine. Returns Build.bat's exit code."""
+        return self._runner.run([str(self._build_bat), "-projectfiles", f"-project={self.project.uproject_path}", "-game", "-rocket", "-progress"])
 
-    def ubt(self, args: list[str] = []) -> int:
-        return self.ubt_path.run(args)
-
-    def build(self, args: list[str] = []) -> int:
-        return self.build_bat_path.run(args)
-
-    def run_editor(self, args: list[str] = []) -> int:
-        return self.editor_exe_path.run(args)
+    def launch_editor(self) -> None:
+        """Start the editor on the project in the background."""
+        self._runner.start([str(self._editor), str(self.project.uproject_path)])
 
     def get_version_number(self) -> Version:
         version = ""
@@ -91,9 +85,6 @@ class Engine:
                 version += f".{jenkins_version_file.read()}"
 
         return Version(version)
-
-    def get_short_version_number(self) -> str:
-        return f"{self.version.major}.{self.version.minor}"
 
     def __str__(self) -> str:
         return f"""

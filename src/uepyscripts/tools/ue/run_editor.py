@@ -1,5 +1,4 @@
 import argparse
-import sys
 
 from uepyscripts.internal.workspace import add_uproject_argument, open_workspace
 
@@ -11,9 +10,7 @@ def main() -> None:
 
     with open_workspace(args) as workspace:
         print("Starting Unreal Editor...")
-        if workspace.engine.run_editor() != 0:
-            print("Failed to start Unreal Editor.")
-            sys.exit(1)
+        workspace.engine.launch_editor()
 
 
 if __name__ == "__main__":
