@@ -17,9 +17,8 @@ from datetime import timedelta
 
 from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
+from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
 from uepyscripts.tools.ugs.git_utils import get_remote_branch_ancestries, is_shallow_repository
-from uepyscripts.tools.ugs.publish_store import DEFAULT_JOBS, PublishStore
-from uepyscripts.tools.ugs.s3_settings import S3_CONFIG_SECTION, add_s3_arguments, resolve_s3_settings
 
 
 def select_versions_to_keep(published: set[str], branch_ancestries: dict[str, list[str]], keep: int) -> set[str]:
@@ -41,7 +40,7 @@ def parse_arguments() -> argparse.Namespace:
         )
     )
     add_uproject_argument(parser)
-    add_s3_arguments(parser)
+    add_publish_store_arguments(parser)
     parser.add_argument("--remote", type=str, default="origin", help="Git remote to check branches against (default: origin)")
     parser.add_argument("--keep-versions", type=int, default=30, help="Published versions to keep per remote branch (default: 30)")
     parser.add_argument(
@@ -50,7 +49,6 @@ def parse_arguments() -> argparse.Namespace:
         default=24,
         help="Never delete a blob younger than this, even if no version references it (default: 24)",
     )
-    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"Number of parallel manifest downloads (default: {DEFAULT_JOBS})")
     parser.add_argument(
         "--dry-run",
         action=argparse.BooleanOptionalAction,
@@ -71,20 +69,12 @@ def main() -> None:
 
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
-    project = workspace.project
-
-    if not project.is_native_project:
-        logger.fatal("You can only clean up binaries for native projects")
-        exit(1)
-
+    store = open_publish_store(workspace, args, dry_run=args.dry_run)
     engine = workspace.engine
 
     if is_shallow_repository(engine.root_path):
         logger.fatal("This is a shallow clone: published commits beyond its depth would look unreachable and get deleted. Run from a full clone.")
         exit(1)
-
-    s3_settings = resolve_s3_settings(workspace.config, args)
-    store = PublishStore.from_settings(s3_settings, jobs=args.jobs, dry_run=args.dry_run)
 
     logger.info(f"Fetching '{args.remote}' and computing the ancestry of each branch")
     branch_ancestries = get_remote_branch_ancestries(engine.root_path, args.remote)

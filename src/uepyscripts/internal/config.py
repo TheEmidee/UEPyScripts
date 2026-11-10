@@ -97,7 +97,7 @@ class JenkinsSection(ConfigSection):
 
 
 class UgsAwsSection(ConfigSection):
-    """Every key is optional: each one can also come from the command line (see ugs.s3_settings)."""
+    """Every key is optional: each one can also come from the command line (see ugs.connection)."""
 
     section_name: ClassVar[str] = "UGS.AWS"
 
