@@ -7,9 +7,8 @@ import pytest
 from tests.ugs.conftest import InMemoryStorage, WriteTree
 from uepyscripts.tools.ugs.cleanup import select_versions_to_keep
 from uepyscripts.tools.ugs.publish_store import PublishStore
-from uepyscripts.tools.ugs.pull import compute_sync
 from uepyscripts.tools.ugs.storage import DryRunStorage
-from uepyscripts.tools.ugs.ugs_types import HashCacheManifest
+from uepyscripts.tools.ugs.ugs_types import HashCacheManifest, diff_manifests
 
 DLL = b"MZ" + b"engine code " * 1000
 EXE = b"MZ" + b"editor " * 500
@@ -258,8 +257,8 @@ def test_symstore_manifest_defaults_to_empty_and_round_trips(storage: InMemorySt
 # ---- callers' pure decisions -----------------------------------------
 
 
-def test_compute_sync_downloads_differences_and_deletes_files_that_are_gone() -> None:
-    to_download, to_delete = compute_sync({"a": "1", "b": "2", "gone": "3"}, {"a": "1", "b": "changed", "new": "4"})
+def test_diff_manifests_lists_changed_and_removed_paths() -> None:
+    to_download, to_delete = diff_manifests({"a": "1", "b": "2", "gone": "3"}, {"a": "1", "b": "changed", "new": "4"})
 
     assert sorted(to_download) == ["b", "new"]
     assert to_delete == ["gone"]

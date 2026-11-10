@@ -50,6 +50,10 @@ _Avoid_: build, release, publish (as a noun)
 The complete list of tracked files at one Version, each mapped to the content hash of that file.
 _Avoid_: file list, state
 
+**Tracked files**:
+The files of the engine tree that make up a Version: binaries and build metadata matched by folder and extension, plus explicit glob patterns. Ignored folders and hot-reload patch files are left out. PDBs are never Tracked files; they go to the symbol store instead.
+_Avoid_: sync files, published files
+
 **Blob**:
 The stored content of one file, identified by its content hash. Identical files across Versions and branches share one Blob.
 _Avoid_: object, chunk, archive
