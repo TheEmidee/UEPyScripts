@@ -1,1 +1,0 @@
-Added missing entries in glob_files of ugs.publish

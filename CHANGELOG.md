@@ -9,6 +9,13 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 
 <!-- towncrier release notes start -->
 
+## [1.6.0] - 2026-11-12
+
+### Changed
+
+- Added missing entries in glob_files of ugs.publish ([#46](https://github.com/TheEmidee/JenkinsFileGenerator/issues/46))
+
+
 ## [1.5.0] - 2026-11-10
 
 ### Removed
