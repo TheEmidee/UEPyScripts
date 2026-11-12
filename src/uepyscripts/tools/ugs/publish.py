@@ -69,7 +69,13 @@ ENGINE_TRACKED_FILES = TrackedFiles(
         "Engine/Intermediate/Build/Win64/**/",
         "Engine/Plugins/**/Intermediate/**/",
     ),
-    glob_files=("Engine/Intermediate/Build/BuildRules/*.json", "Engine/Intermediate/Build/Win64/**/*.h"),
+    glob_files=(
+        "Engine/Intermediate/Build/BuildRules/*.json", 
+        "Engine/Intermediate/Build/Win64/**/*.h",
+        "Engine/Intermediate/Build/Win64/**/*.natvis",
+        "Engine/Plugins/**/Intermediate/**/*.h",
+        "Engine/Plugins/**/Intermediate/**/*.natvis",
+    ),
 )
 
 
