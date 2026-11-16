@@ -38,6 +38,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--disable-symbol-store-upload", action=argparse.BooleanOptionalAction)
     parser.add_argument("--symbol-store-path", type=str, help=("Path of the shared symbol store folder"))
     parser.add_argument(
+        "--force-symbol-store-upload",
+        action=argparse.BooleanOptionalAction,
+        help=("Index every symbol file into the symbol store, even if the commit is already published or the files were indexed before"),
+    )
+    parser.add_argument(
         "--keep_hash_caches",
         type=int,
         default=DEFAULT_KEEP_HASH_CACHES,
@@ -61,7 +66,10 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
     store = open_publish_store(workspace, args)
 
     symbol_indexer: SymbolIndexer | None = None
-    if args.disable_symbol_store_upload:
+    if args.disable_symbol_store_upload and args.force_symbol_store_upload:
+        logger.fatal("--force-symbol-store-upload can't be combined with --disable-symbol-store-upload")
+        exit(1)
+    elif args.disable_symbol_store_upload:
         logger.info("Upload on the symbol store is disabled")
     elif not args.symbol_store_path:
         logger.fatal("Pass --symbol-store-path, or --disable-symbol-store-upload to skip the symbol store")
@@ -85,10 +93,14 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
         symbol_indexer=symbol_indexer,
         skip_upload=bool(args.skip_upload),
         keep_hash_caches=args.keep_hash_caches,
+        force_symbol_index=bool(args.force_symbol_store_upload),
     )
 
     if outcome.already_published:
-        logger.info(f"{commit} already published, skipping (likely a CI re-run of an already-built commit)")
+        if outcome.indexed_symbol_files:
+            logger.info(f"{commit} already published, indexed {outcome.indexed_symbol_files} symbol file(s) (--force-symbol-store-upload)")
+        else:
+            logger.info(f"{commit} already published, skipping (likely a CI re-run of an already-built commit)")
         return
 
     logger.info("Saving list of changed files in Engine/Saved/changed_files.txt")

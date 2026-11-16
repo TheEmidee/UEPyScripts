@@ -4,14 +4,15 @@ the Publish store (see publish_store.py), and the symbol files that changed
 are indexed into the symbol store.
 
 `publish_version` is the whole workflow, in this order:
-  1. stop if the commit is already a Version
+  1. stop if the commit is already a Version (with force_symbol_index, index
+     its symbol files first, as in step 6)
   2. scan the Tracked files, reusing hashes from the nearest Hash cache when a
      file's mtime and size haven't changed
   3. diff against the nearest Version in the ancestry (the baseline)
   4. with skip_upload, stop and report the diff
   5. upload the missing Blobs, then the Manifest
   6. with a symbol indexer, index the symbol files that changed since the last
-     indexing, then record them
+     indexing (every symbol file with force_symbol_index), then record them
   7. save the Hash cache, holding only the files seen in this run
 
 Git, the command line and output files stay with the caller. Retention is
@@ -109,8 +110,9 @@ class SymStoreIndexer:
 
 @dataclass(frozen=True)
 class PublishOutcome:
-    """What publish_version did. When `already_published`, nothing was scanned
-    or written and every other field is empty."""
+    """What publish_version did. When `already_published`, no Version data was
+    scanned or written and every other field is empty, except
+    `indexed_symbol_files` when symbol indexing was forced."""
 
     already_published: bool = False
     baseline: str | None = None
@@ -131,15 +133,22 @@ def publish_version(
     symbol_indexer: SymbolIndexer | None = None,
     skip_upload: bool = False,
     keep_hash_caches: int = DEFAULT_KEEP_HASH_CACHES,
+    force_symbol_index: bool = False,
 ) -> PublishOutcome:
     """Publishes `commit` as a Version from the files under `root`.
 
     `ancestry` is HEAD's ancestry, newest first; its nearest Version is the
     baseline. Without `symbol_indexer`, the symbol store is left alone. With
-    `skip_upload`, the diff is computed and nothing is written."""
+    `force_symbol_index`, every symbol file is indexed, even when `commit` is
+    already a Version or the files were indexed before. With `skip_upload`,
+    the diff is computed and nothing is written."""
     baseline_version = store.nearest_version(ancestry)
     if baseline_version == commit:
-        return PublishOutcome(already_published=True, baseline=commit)
+        indexed = 0
+        if force_symbol_index and symbol_indexer is not None and not skip_upload:
+            hasher = _CachedHasher(store.latest_hash_cache(ancestry))
+            indexed = _index_symbols(store, tracked_files, root, hasher, symbol_indexer, force=True)
+        return PublishOutcome(already_published=True, baseline=commit, indexed_symbol_files=indexed)
 
     hasher = _CachedHasher(store.latest_hash_cache(ancestry))
 
@@ -165,17 +174,7 @@ def publish_version(
 
     indexed = 0
     if symbol_indexer is not None:
-        logger.info("Scan file states for debug files")
-        symbols = _scan_by_extension(root, tracked_files, tracked_files.symbol_extensions, hasher)
-        symbols_changed, _ = diff_manifests(store.symstore_manifest(), symbols)
-
-        if symbols_changed:
-            logger.info(f"Indexing {len(symbols_changed)} file(s) into the symbol store")
-            symbol_indexer.index([root / path for path in symbols_changed])
-            store.save_symstore_manifest(symbols)
-        else:
-            logger.info("No changes for the symbol store")
-        indexed = len(symbols_changed)
+        indexed = _index_symbols(store, tracked_files, root, hasher, symbol_indexer, force=force_symbol_index)
 
     logger.info("Upload hash cache")
     store.save_hash_cache(commit, hasher.hash_cache(commit), keep=keep_hash_caches)
@@ -191,6 +190,30 @@ def publish_version(
 
 
 # ---- Internals --------------------------------------------------------
+
+
+def _index_symbols(
+    store: PublishStore,
+    tracked_files: TrackedFiles,
+    root: Path,
+    hasher: "_CachedHasher",
+    symbol_indexer: SymbolIndexer,
+    *,
+    force: bool,
+) -> int:
+    """Indexes the symbol files that changed since the last indexing (all of
+    them with `force`), records them, and returns how many were indexed."""
+    logger.info("Scan file states for debug files")
+    symbols = _scan_by_extension(root, tracked_files, tracked_files.symbol_extensions, hasher)
+    symbols_changed, _ = diff_manifests({} if force else store.symstore_manifest(), symbols)
+
+    if symbols_changed:
+        logger.info(f"Indexing {len(symbols_changed)} file(s) into the symbol store")
+        symbol_indexer.index([root / path for path in symbols_changed])
+        store.save_symstore_manifest(symbols)
+    else:
+        logger.info("No changes for the symbol store")
+    return len(symbols_changed)
 
 
 class _CachedHasher:

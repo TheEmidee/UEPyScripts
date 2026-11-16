@@ -123,6 +123,35 @@ def test_only_symbol_files_changed_since_the_last_indexing_are_indexed(
     assert sorted(store.symstore_manifest()) == ["Bin/a.dll", "Bin/a.pdb"]
 
 
+def test_forcing_indexes_symbols_of_an_already_published_commit(
+    store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
+) -> None:
+    write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB})
+    publish(store, tmp_path, "c1", [])
+    storage.operations.clear()
+    indexer = RecordingIndexer()
+
+    outcome = publish(store, tmp_path, "c1", [], symbol_indexer=indexer, force_symbol_index=True)
+
+    assert outcome == PublishOutcome(already_published=True, baseline="c1", indexed_symbol_files=2)
+    assert [sorted(call) for call in indexer.calls] == [[tmp_path / "Bin/a.dll", tmp_path / "Bin/a.pdb"]]
+    assert writes(storage) == [("write", "symstore-manifest.json")]
+
+
+def test_forcing_reindexes_symbol_files_indexed_before(store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path) -> None:
+    write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB})
+    indexer = RecordingIndexer()
+    publish(store, tmp_path, "c1", [], symbol_indexer=indexer)
+
+    outcome = publish(store, tmp_path, "c2", ["c1"], symbol_indexer=indexer, force_symbol_index=True)
+
+    assert [sorted(call) for call in indexer.calls] == [
+        [tmp_path / "Bin/a.dll", tmp_path / "Bin/a.pdb"],
+        [tmp_path / "Bin/a.dll", tmp_path / "Bin/a.pdb"],
+    ]
+    assert outcome.indexed_symbol_files == 2
+
+
 def test_without_an_indexer_the_symbol_store_is_left_alone(
     store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
 ) -> None:
