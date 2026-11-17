@@ -13,6 +13,7 @@ from uepyscripts.tools.ugs.ugs_types import HashCacheManifest, diff_manifests
 DLL = b"MZ" + b"engine code " * 1000
 EXE = b"MZ" + b"editor " * 500
 LIB = b"!<arch>" + b"symbols " * 800
+PDB = b"Microsoft C/C++ MSF " * 300
 
 
 def make_store(storage: InMemoryStorage) -> PublishStore:
@@ -145,6 +146,38 @@ def test_download_replaces_existing_files_and_creates_folders(storage: InMemoryS
     assert sorted(p.name for p in (tmp_path / "dev/Engine").iterdir()) == ["New", "a.dll"]
 
 
+# ---- Symbols manifests -----------------------------------------------
+
+
+def test_a_version_has_no_symbols_manifest_until_one_is_published(storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path) -> None:
+    store = make_store(storage)
+    store.publish("v1", write_tree(tmp_path, {"a.dll": DLL}), tmp_path)
+
+    assert store.symbols_manifest("v1") is None
+
+
+def test_publish_symbols_uploads_blobs_then_the_symbols_manifest(storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path) -> None:
+    store = make_store(storage)
+    symbols = write_tree(tmp_path, {"a.pdb": PDB})
+
+    result = store.publish_symbols("v1", symbols, tmp_path)
+
+    assert result.uploaded_blobs == 1
+    assert store.symbols_manifest("v1") == symbols
+    assert [key for op, key in storage.operations if op in ("upload", "write")] == [f"blobs/{symbols['a.pdb']}", "symbols/v1.json"]
+    assert store.versions() == set()  # a Symbols manifest alone is not a Version
+
+
+def test_publish_symbols_reuses_blobs_already_in_the_bucket(storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path) -> None:
+    store = make_store(storage)
+    symbols = write_tree(tmp_path, {"a.pdb": PDB})
+    store.publish_symbols("v1", symbols, tmp_path)
+
+    result = store.publish_symbols("v2", symbols, tmp_path)
+
+    assert (result.uploaded_blobs, result.reused_blobs) == (0, 1)
+
+
 # ---- prune -----------------------------------------------------------
 
 
@@ -164,6 +197,25 @@ def test_prune_deletes_removed_manifests_hash_caches_and_unreferenced_blobs(stor
     assert store.versions() == {"v2"}
     assert storage.keys("hash_caches/") == set()
     assert storage.keys("blobs/") == {f"blobs/{v2['a.dll']}", f"blobs/{v2['c.lib']}"}
+
+
+def test_prune_removes_symbols_manifests_and_keeps_the_blobs_remaining_ones_reference(
+    storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
+) -> None:
+    store = make_store(storage)
+    for version, pdb in (("v1", PDB + b"v1"), ("v2", PDB + b"v2")):
+        folder = tmp_path / version
+        store.publish_symbols(version, write_tree(folder, {"a.pdb": pdb}), folder)
+        store.publish(version, write_tree(folder, {"a.dll": DLL}), folder)
+    v2_symbols = store.symbols_manifest("v2")
+    assert v2_symbols is not None
+    storage.advance(timedelta(days=2))
+
+    result = store.prune({"v1"}, blob_grace=timedelta(hours=24), now=storage.now)
+
+    assert result.deleted_blobs == 1  # v1's PDB
+    assert storage.keys("symbols/") == {"symbols/v2.json"}
+    assert f"blobs/{v2_symbols['a.pdb']}" in storage.keys("blobs/")
 
 
 def test_prune_keeps_unreferenced_blobs_younger_than_the_grace_period(storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path) -> None:

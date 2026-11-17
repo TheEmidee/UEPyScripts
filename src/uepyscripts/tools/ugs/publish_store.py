@@ -1,6 +1,6 @@
 """
-The Publish store: every published Version, Blob, Hash cache and the
-symbol-store manifest, kept in one bucket.
+The Publish store: every published Version, Blob, Symbols manifest, Hash cache
+and the symbol-store manifest, kept in one bucket.
 
 Layout (content-addressed):
 
@@ -9,12 +9,15 @@ Layout (content-addressed):
   blobs/{blake3}           zstd-compressed content of one file, keyed by the
                            hash of the uncompressed file. Shared by every
                            Version and branch that has the same file.
+  symbols/{sha}.json       {"files": {relative_path: blake3}}: the symbol files
+                           (PDBs) published alongside a Version, as Blobs. Only
+                           there when push was asked to upload symbols to S3.
   hash_caches/{sha}.json   push-side fingerprints, a speed-up only.
   symstore-manifest.json   files last indexed into the symbol store.
 
 Nobody outside this module knows a key. Write order is part of the interface:
-Blobs are uploaded before the Manifest that references them, so a Version
-never appears with missing content.
+Blobs are uploaded before the Manifest (or Symbols manifest) that references
+them, so a Version never appears with missing content.
 """
 
 import json
@@ -36,6 +39,7 @@ from uepyscripts.tools.ugs.ugs_types import HashCacheManifest, Manifest, Version
 
 MANIFESTS_PREFIX = "manifests/"
 BLOBS_PREFIX = "blobs/"
+SYMBOLS_PREFIX = "symbols/"
 HASH_CACHES_PREFIX = "hash_caches/"
 SYMSTORE_MANIFEST_KEY = "symstore-manifest.json"
 
@@ -64,6 +68,10 @@ def _manifest_key(version: str) -> str:
 
 def _blob_key(file_hash: str) -> str:
     return f"{BLOBS_PREFIX}{file_hash}"
+
+
+def _symbols_key(version: str) -> str:
+    return f"{SYMBOLS_PREFIX}{version}.json"
 
 
 def _hash_cache_key(version: str) -> str:
@@ -119,29 +127,10 @@ class PublishStore:
         the Manifest. Hashes in `baseline` (the Manifest of an existing
         Version) are trusted to be present already; without one, the Blobs in
         the bucket are listed once."""
-        path_for_hash: dict[str, str] = {}
-        for path, file_hash in manifest.items():
-            path_for_hash.setdefault(file_hash, path)
-
-        if baseline is None:
-            known = self._blob_hashes()
-            missing = [h for h in path_for_hash if h not in known]
-        else:
-            known = set(baseline.values())
-            candidates = [h for h in path_for_hash if h not in known]
-            exists = self._parallel(lambda h: self._storage.exists(_blob_key(h)), candidates)
-            missing = [h for h, present in zip(candidates, exists) if not present]
-
-        logger.info(f"Uploading {len(missing)} new blob(s), reusing {len(path_for_hash) - len(missing)}")
-
-        with tempfile.TemporaryDirectory(prefix="publish-blobs-") as tmp:
-            tmp_dir = Path(tmp)
-            self._parallel(lambda h: self._upload_blob(h, root / path_for_hash[h], tmp_dir), missing)
-
+        result = self._upload_missing_blobs(manifest, root, baseline)
         payload: VersionManifest = {"files": manifest}
         self._storage.write(_manifest_key(version), _encode_json(payload))
-
-        return PublishResult(uploaded_blobs=len(missing), reused_blobs=len(path_for_hash) - len(missing))
+        return result
 
     def download(self, manifest: Manifest, paths: Iterable[str], root: Path) -> None:
         """Writes the content `manifest` gives each of `paths` under `root`,
@@ -152,8 +141,9 @@ class PublishStore:
         self._parallel(lambda p: self._download_blob(manifest[p], root / p), paths)
 
     def prune(self, remove: Iterable[str], blob_grace: timedelta, now: datetime | None = None) -> PruneResult:
-        """Removes the Manifests of `remove`, then deletes every Blob that no
-        remaining Manifest references and that is older than `blob_grace`. The
+        """Removes the Manifests (and Symbols manifests) of `remove`, then deletes
+        every Blob that no remaining Manifest or Symbols manifest references and
+        that is older than `blob_grace`. The
         grace period protects Blobs a push has uploaded but whose Manifest
         isn't written yet."""
         now = now or datetime.now(timezone.utc)
@@ -162,11 +152,15 @@ class PublishStore:
         remaining = sorted(published - set(removed))
 
         self._storage.delete([_manifest_key(v) for v in removed])
+        self._storage.delete([_symbols_key(v) for v in removed])
         self._storage.delete([_hash_cache_key(v) for v in removed])
 
         referenced: set[str] = set()
         for files in self._parallel(self.manifest, remaining):
             referenced.update(files.values())
+        with_symbols = sorted(self._symbols_versions() & set(remaining))
+        for symbols in self._parallel(self.symbols_manifest, with_symbols):
+            referenced.update((symbols or {}).values())
 
         cutoff = now - blob_grace
         garbage = [
@@ -175,6 +169,24 @@ class PublishStore:
         self._storage.delete(garbage)
 
         return PruneResult(removed_versions=removed, deleted_blobs=len(garbage))
+
+    # ---- Symbols manifests --------------------------------------------
+
+    def symbols_manifest(self, version: str) -> Manifest | None:
+        """The symbol files published alongside `version`, or None when none were."""
+        data = self._storage.read(_symbols_key(version))
+        return cast(VersionManifest, json.loads(data))["files"] if data is not None else None
+
+    def publish_symbols(self, version: str, symbols: Manifest, root: Path, baseline: Manifest | None = None) -> PublishResult:
+        """Uploads the Blobs of `symbols` the bucket doesn't have yet, read from
+        `root`, then the Symbols manifest of `version`. Hashes in `baseline`
+        (the Symbols manifest of an existing Version) are trusted to be present
+        already; the others are checked one by one, since symbol files are few
+        next to every Blob of the bucket."""
+        result = self._upload_missing_blobs(symbols, root, baseline if baseline is not None else {})
+        payload: VersionManifest = {"files": symbols}
+        self._storage.write(_symbols_key(version), _encode_json(payload))
+        return result
 
     # ---- Hash caches --------------------------------------------------
 
@@ -221,6 +233,34 @@ class PublishStore:
         self._storage.write(SYMSTORE_MANIFEST_KEY, _encode_json(manifest))
 
     # ---- Internals ----------------------------------------------------
+
+    def _symbols_versions(self) -> set[str]:
+        return {_name_after(SYMBOLS_PREFIX, obj.key, ".json") for obj in self._storage.list(SYMBOLS_PREFIX)}
+
+    def _upload_missing_blobs(self, manifest: Manifest, root: Path, baseline: Manifest | None) -> PublishResult:
+        """Uploads the Blobs of `manifest` the bucket doesn't have yet. Hashes in
+        `baseline` are trusted to be present; without one, the Blobs in the
+        bucket are listed once."""
+        path_for_hash: dict[str, str] = {}
+        for path, file_hash in manifest.items():
+            path_for_hash.setdefault(file_hash, path)
+
+        if baseline is None:
+            known = self._blob_hashes()
+            missing = [h for h in path_for_hash if h not in known]
+        else:
+            known = set(baseline.values())
+            candidates = [h for h in path_for_hash if h not in known]
+            exists = self._parallel(lambda h: self._storage.exists(_blob_key(h)), candidates)
+            missing = [h for h, present in zip(candidates, exists) if not present]
+
+        logger.info(f"Uploading {len(missing)} new blob(s), reusing {len(path_for_hash) - len(missing)}")
+
+        with tempfile.TemporaryDirectory(prefix="publish-blobs-") as tmp:
+            tmp_dir = Path(tmp)
+            self._parallel(lambda h: self._upload_blob(h, root / path_for_hash[h], tmp_dir), missing)
+
+        return PublishResult(uploaded_blobs=len(missing), reused_blobs=len(path_for_hash) - len(missing))
 
     def _blob_hashes(self) -> set[str]:
         return {_name_after(BLOBS_PREFIX, obj.key) for obj in self._storage.list(BLOBS_PREFIX)}

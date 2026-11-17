@@ -107,6 +107,13 @@ class UgsAwsSection(ConfigSection):
     secret_key: Optional[str] = Field(default=None, alias="AWS_SecretKey")
 
 
+class UgsSection(ConfigSection):
+    section_name: ClassVar[str] = "UGS"
+
+    # Also sync the PDBs that ue-ugs-push uploaded with --upload-symbols-to-s3
+    sync_symbols: bool = Field(default=False, alias="SyncSymbols")
+
+
 SectionT = TypeVar("SectionT", bound=ConfigSection)
 
 
@@ -129,6 +136,10 @@ class Config:
     @property
     def jenkins(self) -> JenkinsSection:
         return self._section(JenkinsSection)
+
+    @property
+    def ugs(self) -> UgsSection:
+        return self._section(UgsSection)
 
     @property
     def ugs_aws(self) -> UgsAwsSection:

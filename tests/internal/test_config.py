@@ -61,6 +61,24 @@ def test_ugs_aws_section_reads_optional_keys(project_root: Path) -> None:
     assert (ugs_aws.bucket_name, ugs_aws.bucket_region, ugs_aws.access_key, ugs_aws.secret_key) == ("bucket", "eu-west-1", None, None)
 
 
+def test_ugs_section_syncs_symbols_only_when_asked(project_root: Path) -> None:
+    assert load(project_root).ugs.sync_symbols is False
+
+    write_ini(project_root, "[UGS]\nSyncSymbols = True\n", name="config.local.ini")
+
+    assert load(project_root).ugs.sync_symbols is True
+
+
+def test_a_malformed_sync_symbols_value_is_reported(project_root: Path) -> None:
+    write_ini(project_root, "[UGS]\nSyncSymbols = sometimes\n")
+
+    with pytest.raises(ConfigError) as error:
+        _ = load(project_root).ugs
+
+    assert error.value.section == "UGS"
+    assert "SyncSymbols" in error.value.problems[0]
+
+
 def test_property_values_keep_everything_after_the_first_equals(project_root: Path) -> None:
     write_ini(project_root, "[Project]\nBuildgraphSharedProperties = Args=-a=1 -b=2+Empty=\n")
 

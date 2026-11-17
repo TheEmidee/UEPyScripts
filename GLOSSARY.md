@@ -59,8 +59,12 @@ The complete list of tracked files at one Version, each mapped to the content ha
 _Avoid_: file list, state
 
 **Tracked files**:
-The files of the engine tree that make up a Version: binaries and build metadata matched by folder and extension, plus explicit glob patterns. Ignored folders and hot-reload patch files are left out. PDBs are never Tracked files; they go to the symbol store instead.
+The files of the engine tree that make up a Version: binaries and build metadata matched by folder and extension, plus explicit glob patterns. Ignored folders and hot-reload patch files are left out. PDBs are never Tracked files; they go to the symbol store, the Symbols manifest, or both.
 _Avoid_: sync files, published files
+
+**Symbols manifest**:
+The PDBs published alongside one Version, each mapped to its content hash, stored as Blobs like any other file. Only written when push is asked to upload symbols to S3, and only synced when the Project config asks for it.
+_Avoid_: symbol store (that is the symstore folder), symstore manifest (that records what was indexed into the symbol store)
 
 **Blob**:
 The stored content of one file, identified by its content hash. Identical files across Versions and branches share one Blob.
@@ -70,11 +74,11 @@ _Avoid_: object, chunk, archive
 Per-file fingerprints recorded at a commit so the next publish can skip re-hashing unchanged files. It is a speed-up only; losing it never affects correctness.
 
 **Publish store**:
-The Manifests, Blobs, Hash caches and symbol-store manifest kept in the bucket, treated as one thing.
+The Manifests, Symbols manifests, Blobs, Hash caches and symbol-store manifest kept in the bucket, treated as one thing.
 _Avoid_: bucket (when you mean its contents), binary cache
 
 **Sync**:
-Making the local engine tree match one Version's Manifest: downloading the files whose hash differs from the Sync state and deleting the ones no longer tracked. The target is the nearest Version in HEAD's ancestry, or the latest Version when none is (history was rewritten).
+Making the local engine tree match one Version's Manifest (plus its Symbols manifest, when the Project config asks for symbols): downloading the files whose hash differs from the Sync state and deleting the ones no longer tracked. The target is the nearest Version in HEAD's ancestry, or the latest Version when none is (history was rewritten).
 _Avoid_: pull (that is the command), download (that is one step)
 
 **Sync state**:

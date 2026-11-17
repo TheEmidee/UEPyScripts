@@ -13,9 +13,11 @@ from uepyscripts.tools.ugs.ugs_types import Manifest
 DLL_V1 = b"MZ" + b"engine code v1 " * 100
 DLL_V2 = b"MZ" + b"engine code v2 " * 100
 EXE = b"MZ" + b"editor " * 100
+PDB = b"Microsoft C/C++ MSF " * 100
 OLD = b"MZ" + b"removed later " * 100
 
 Publish = Callable[[str, dict[str, bytes]], Manifest]
+PublishWithSymbols = Callable[[str, dict[str, bytes], dict[str, bytes]], None]
 
 
 @pytest.fixture
@@ -39,6 +41,18 @@ def publish(store: PublishStore, write_tree: WriteTree, tmp_path: Path) -> Publi
         manifest = write_tree(source, files)
         store.publish(version, manifest, source)
         return manifest
+
+    return publish_files
+
+
+@pytest.fixture
+def publish_with_symbols(store: PublishStore, write_tree: WriteTree, tmp_path: Path) -> PublishWithSymbols:
+    """Publishes `files` as a Version, with `symbols` as its Symbols manifest."""
+
+    def publish_files(version: str, files: dict[str, bytes], symbols: dict[str, bytes]) -> None:
+        source = tmp_path / "published" / version
+        store.publish_symbols(version, write_tree(source, symbols), source)
+        store.publish(version, write_tree(source, files), source)
 
     return publish_files
 
@@ -67,7 +81,7 @@ def test_first_sync_writes_every_file_of_the_nearest_version_and_saves_the_sync_
     assert outcome.version == "c2"
     assert sorted(outcome.downloaded) == ["Bin/a.dll", "Bin/b.exe"]
     assert read_tree(root) == {"Bin/a.dll": DLL_V1, "Bin/b.exe": EXE}
-    assert sync_state(root) == {"version": "c2", "manifest": manifest}
+    assert sync_state(root) == {"version": "c2", "manifest": manifest, "symbols": False}
 
 
 def test_an_already_synced_version_downloads_nothing(store: PublishStore, publish: Publish, root: Path) -> None:
@@ -91,7 +105,7 @@ def test_a_later_sync_downloads_changed_files_and_deletes_removed_ones(store: Pu
     assert outcome.downloaded == ["Bin/a.dll"]
     assert outcome.deleted == ["Bin/old.dll"]
     assert read_tree(root) == {"Bin/a.dll": DLL_V2, "Bin/b.exe": EXE}
-    assert sync_state(root) == {"version": "c2", "manifest": manifest}
+    assert sync_state(root) == {"version": "c2", "manifest": manifest, "symbols": False}
 
 
 def test_without_a_version_in_the_ancestry_the_latest_version_is_synced(
@@ -137,3 +151,64 @@ def test_a_failed_download_keeps_the_previous_sync_state_and_deletes_nothing(
 
     assert sync_state(root) == state_before
     assert read_tree(root) == {"Bin/a.dll": DLL_V1, "Bin/old.dll": OLD}
+
+
+# ---- symbols ---------------------------------------------------------
+
+
+def test_symbols_are_not_synced_unless_asked(store: PublishStore, publish_with_symbols: PublishWithSymbols, root: Path) -> None:
+    publish_with_symbols("c1", {"Bin/a.dll": DLL_V1}, {"Bin/a.pdb": PDB})
+
+    outcome = sync_version(store, root, ["c1"])
+
+    assert not outcome.with_symbols
+    assert read_tree(root) == {"Bin/a.dll": DLL_V1}
+
+
+def test_with_symbols_the_pdbs_of_the_version_are_synced_too(store: PublishStore, publish_with_symbols: PublishWithSymbols, root: Path) -> None:
+    publish_with_symbols("c1", {"Bin/a.dll": DLL_V1}, {"Bin/a.pdb": PDB})
+
+    outcome = sync_version(store, root, ["c1"], with_symbols=True)
+
+    assert outcome.with_symbols
+    assert read_tree(root) == {"Bin/a.dll": DLL_V1, "Bin/a.pdb": PDB}
+    assert sync_state(root)["symbols"] is True
+
+
+def test_asking_for_symbols_after_a_sync_without_them_downloads_only_the_pdbs(
+    store: PublishStore, publish_with_symbols: PublishWithSymbols, root: Path
+) -> None:
+    publish_with_symbols("c1", {"Bin/a.dll": DLL_V1}, {"Bin/a.pdb": PDB})
+    sync_version(store, root, ["c1"])
+
+    outcome = sync_version(store, root, ["c1"], with_symbols=True)
+
+    assert not outcome.already_synced
+    assert outcome.downloaded == ["Bin/a.pdb"]
+    assert sync_version(store, root, ["c1"], with_symbols=True).already_synced
+
+
+def test_no_longer_asking_for_symbols_deletes_the_synced_pdbs(store: PublishStore, publish_with_symbols: PublishWithSymbols, root: Path) -> None:
+    publish_with_symbols("c1", {"Bin/a.dll": DLL_V1}, {"Bin/a.pdb": PDB})
+    sync_version(store, root, ["c1"], with_symbols=True)
+
+    outcome = sync_version(store, root, ["c1"])
+
+    assert outcome.deleted == ["Bin/a.pdb"]
+    assert read_tree(root) == {"Bin/a.dll": DLL_V1}
+
+
+def test_asking_for_symbols_of_a_version_without_any_changes_nothing(store: PublishStore, publish: Publish, root: Path) -> None:
+    publish("c1", {"Bin/a.dll": DLL_V1})
+    sync_version(store, root, ["c1"])
+
+    outcome = sync_version(store, root, ["c1"], with_symbols=True)
+
+    assert outcome == SyncOutcome(version="c1", already_synced=True)
+
+
+def test_a_sync_state_from_before_symbols_counts_as_synced_without_them(store: PublishStore, publish: Publish, root: Path) -> None:
+    manifest = publish("c1", {"Bin/a.dll": DLL_V1})
+    (root / SYNC_STATE_FILE).write_text(json.dumps({"version": "c1", "manifest": manifest}))
+
+    assert sync_version(store, root, ["c1"]).already_synced

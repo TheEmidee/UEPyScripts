@@ -1,19 +1,26 @@
 """
 Publishing a Version: the Tracked files of the engine tree at one commit go to
-the Publish store (see publish_store.py), and the symbol files that changed
-are indexed into the symbol store.
+the Publish store (see publish_store.py). The symbol files that changed are
+indexed into the symbol store, and with upload_symbols the PDBs also go to the
+Publish store, as the Version's Symbols manifest. Both can be done in one run.
 
 `publish_version` is the whole workflow, in this order:
   1. stop if the commit is already a Version (with force_symbol_index, index
-     its symbol files first, as in step 6)
+     its symbol files first, as in step 7; with upload_symbols, publish its
+     Symbols manifest first, as in step 5, unless it already has one)
   2. scan the Tracked files, reusing hashes from the nearest Hash cache when a
      file's mtime and size haven't changed
   3. diff against the nearest Version in the ancestry (the baseline)
   4. with skip_upload, stop and report the diff
-  5. upload the missing Blobs, then the Manifest
-  6. with a symbol indexer, index the symbol files that changed since the last
+  5. with upload_symbols, upload the missing PDB Blobs, then the Symbols
+     manifest
+  6. upload the missing Blobs, then the Manifest
+  7. with a symbol indexer, index the symbol files that changed since the last
      indexing (every symbol file with force_symbol_index), then record them
-  7. save the Hash cache, holding only the files seen in this run
+  8. save the Hash cache, holding only the files seen in this run
+
+The Symbols manifest is written before the Manifest, so a Version that has
+symbols has them as soon as it exists.
 
 Git, the command line and output files stay with the caller. Retention is
 ugs.cleanup's job, never this module's.
@@ -55,6 +62,8 @@ class TrackedFiles:
     extensions: frozenset[str] = frozenset({".dll", ".exe", ".lib", ".modules", ".target"})
     # PDBs are the point of the symbol store; DLL/EXE ride along so minidumps
     # and remote debugging resolve both code and symbols from one place.
+    # Only the ones that aren't Tracked files (the PDBs) go to the Symbols
+    # manifest: the others are in the Manifest already.
     symbol_extensions: frozenset[str] = frozenset({".pdb", ".dll", ".exe"})
     ignored_folders: frozenset[str] = frozenset({"Intermediate"})
     # Hot-reload leftovers: `.patch_` followed by digits at the end of the stem
@@ -71,7 +80,7 @@ ENGINE_TRACKED_FILES = TrackedFiles(
         "Engine/Plugins/**/Intermediate/**/",
     ),
     glob_files=(
-        "Engine/Intermediate/Build/BuildRules/*.json", 
+        "Engine/Intermediate/Build/BuildRules/*.json",
         "Engine/Intermediate/Build/Win64/**/*.h",
         "Engine/Intermediate/Build/Win64/**/*.natvis",
         "Engine/Plugins/**/Intermediate/**/*.h",
@@ -112,7 +121,10 @@ class SymStoreIndexer:
 class PublishOutcome:
     """What publish_version did. When `already_published`, no Version data was
     scanned or written and every other field is empty, except
-    `indexed_symbol_files` when symbol indexing was forced."""
+    `indexed_symbol_files` when symbol indexing was forced and
+    `published_symbol_files` when the Version had no Symbols manifest yet.
+    `published_symbol_files` is how many files the Symbols manifest written by
+    this run lists (0 when none was written)."""
 
     already_published: bool = False
     baseline: str | None = None
@@ -121,6 +133,7 @@ class PublishOutcome:
     uploaded_blobs: int = 0
     reused_blobs: int = 0
     indexed_symbol_files: int = 0
+    published_symbol_files: int = 0
 
 
 def publish_version(
@@ -134,21 +147,34 @@ def publish_version(
     skip_upload: bool = False,
     keep_hash_caches: int = DEFAULT_KEEP_HASH_CACHES,
     force_symbol_index: bool = False,
+    upload_symbols: bool = False,
 ) -> PublishOutcome:
     """Publishes `commit` as a Version from the files under `root`.
 
     `ancestry` is HEAD's ancestry, newest first; its nearest Version is the
     baseline. Without `symbol_indexer`, the symbol store is left alone. With
     `force_symbol_index`, every symbol file is indexed, even when `commit` is
-    already a Version or the files were indexed before. With `skip_upload`,
-    the diff is computed and nothing is written."""
+    already a Version or the files were indexed before. With `upload_symbols`,
+    the PDBs are published as the Version's Symbols manifest, also when
+    `commit` is already a Version that has none. With `skip_upload`, the diff
+    is computed and nothing is written."""
     baseline_version = store.nearest_version(ancestry)
     if baseline_version == commit:
+        if skip_upload:
+            return PublishOutcome(already_published=True, baseline=commit)
+
+        force_index = force_symbol_index and symbol_indexer is not None
+        backfill_symbols = upload_symbols and store.symbols_manifest(commit) is None
         indexed = 0
-        if force_symbol_index and symbol_indexer is not None and not skip_upload:
+        published_symbols = 0
+        if backfill_symbols or force_index:
             hasher = _CachedHasher(store.latest_hash_cache(ancestry))
-            indexed = _index_symbols(store, tracked_files, root, hasher, symbol_indexer, force=True)
-        return PublishOutcome(already_published=True, baseline=commit, indexed_symbol_files=indexed)
+            if backfill_symbols:
+                published_symbols = _publish_symbols(store, tracked_files, root, commit, hasher, baseline=None)
+            if force_index:
+                assert symbol_indexer is not None
+                indexed = _index_symbols(store, tracked_files, root, hasher, symbol_indexer, force=True)
+        return PublishOutcome(already_published=True, baseline=commit, indexed_symbol_files=indexed, published_symbol_files=published_symbols)
 
     hasher = _CachedHasher(store.latest_hash_cache(ancestry))
 
@@ -170,6 +196,11 @@ def publish_version(
     if skip_upload:
         return PublishOutcome(baseline=baseline_version, changed=changed, removed=removed)
 
+    published_symbols = 0
+    if upload_symbols:
+        symbols_baseline = store.symbols_manifest(baseline_version) if baseline_version is not None else None
+        published_symbols = _publish_symbols(store, tracked_files, root, commit, hasher, baseline=symbols_baseline)
+
     result = store.publish(commit, manifest, root, baseline=baseline)
 
     indexed = 0
@@ -186,6 +217,7 @@ def publish_version(
         uploaded_blobs=result.uploaded_blobs,
         reused_blobs=result.reused_blobs,
         indexed_symbol_files=indexed,
+        published_symbol_files=published_symbols,
     )
 
 
@@ -216,6 +248,25 @@ def _index_symbols(
     return len(symbols_changed)
 
 
+def _publish_symbols(
+    store: PublishStore,
+    tracked_files: TrackedFiles,
+    root: Path,
+    commit: str,
+    hasher: "_CachedHasher",
+    *,
+    baseline: Manifest | None,
+) -> int:
+    """Publishes the symbol files that aren't Tracked files (the PDBs) as the
+    Symbols manifest of `commit`, and returns how many it lists. `baseline`
+    is the Symbols manifest of the baseline Version, if it has one."""
+    logger.info("Scan file states for symbol files to upload to S3")
+    symbols = _scan_by_extension(root, tracked_files, tracked_files.symbol_extensions - tracked_files.extensions, hasher)
+    logger.info(f"Uploading {len(symbols)} symbol file(s) to S3")
+    store.publish_symbols(commit, symbols, root, baseline=baseline)
+    return len(symbols)
+
+
 class _CachedHasher:
     """Hashes files, reusing the previous Hash cache's hash when a file's
     mtime and size are unchanged. Remembers only the files it was asked
@@ -233,7 +284,8 @@ class _CachedHasher:
         stat = path.stat()
         fingerprint = f"{stat.st_mtime_ns}:{stat.st_size}"
 
-        cached = self._previous.get(rel)
+        # Symbol files can be scanned twice in one run: for S3 and for the symbol store
+        cached = self._seen.get(rel) or self._previous.get(rel)
         if cached and cached["fingerprint"] == fingerprint:
             file_hash = cached["hash"]
         else:

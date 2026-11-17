@@ -163,6 +163,72 @@ def test_without_an_indexer_the_symbol_store_is_left_alone(
     assert storage.keys("symstore") == set()
 
 
+def test_uploading_symbols_publishes_the_pdbs_as_a_symbols_manifest_before_the_manifest(
+    store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
+) -> None:
+    files = write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB})
+
+    outcome = publish(store, tmp_path, "c1", [], upload_symbols=True)
+
+    assert outcome.published_symbol_files == 1
+    assert store.symbols_manifest("c1") == {"Bin/a.pdb": files["Bin/a.pdb"]}
+    assert "Bin/a.pdb" not in store.manifest("c1")
+    keys = [key for _, key in writes(storage)]
+    assert keys.index("symbols/c1.json") < keys.index("manifests/c1.json")
+
+
+def test_uploading_symbols_only_uploads_pdbs_the_baseline_lacks(
+    store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
+) -> None:
+    write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB, "Bin/b.pdb": PDB + b"b"})
+    publish(store, tmp_path, "c1", [], upload_symbols=True)
+    storage.operations.clear()
+
+    files = write_tree(tmp_path, {"Bin/a.pdb": PDB + b"rebuilt"})
+    outcome = publish(store, tmp_path, "c2", ["c1"], upload_symbols=True)
+
+    assert outcome.published_symbol_files == 2
+    assert uploads(storage) == [f"blobs/{files['Bin/a.pdb']}"]
+
+
+def test_symbols_go_to_both_the_symbol_store_and_s3_in_one_run(store: PublishStore, write_tree: WriteTree, tmp_path: Path) -> None:
+    write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB})
+    indexer = RecordingIndexer()
+
+    outcome = publish(store, tmp_path, "c1", [], symbol_indexer=indexer, upload_symbols=True)
+
+    assert (outcome.indexed_symbol_files, outcome.published_symbol_files) == (2, 1)
+    assert sorted(store.symbols_manifest("c1") or {}) == ["Bin/a.pdb"]
+
+
+def test_without_uploading_symbols_no_symbols_manifest_is_written(store: PublishStore, write_tree: WriteTree, tmp_path: Path) -> None:
+    write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB})
+
+    outcome = publish(store, tmp_path, "c1", [])
+
+    assert outcome.published_symbol_files == 0
+    assert store.symbols_manifest("c1") is None
+
+
+def test_uploading_symbols_backfills_an_already_published_version_once(
+    store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
+) -> None:
+    write_tree(tmp_path, {"Bin/a.dll": DLL, "Bin/a.pdb": PDB})
+    publish(store, tmp_path, "c1", [])
+    storage.operations.clear()
+
+    outcome = publish(store, tmp_path, "c1", [], upload_symbols=True)
+
+    assert outcome == PublishOutcome(already_published=True, baseline="c1", published_symbol_files=1)
+    assert sorted(store.symbols_manifest("c1") or {}) == ["Bin/a.pdb"]
+
+    storage.operations.clear()
+    again = publish(store, tmp_path, "c1", [], upload_symbols=True)
+
+    assert again == PublishOutcome(already_published=True, baseline="c1")
+    assert writes(storage) == []
+
+
 def test_a_file_with_unchanged_mtime_and_size_keeps_its_cached_hash(
     store: PublishStore, storage: InMemoryStorage, write_tree: WriteTree, tmp_path: Path
 ) -> None:
