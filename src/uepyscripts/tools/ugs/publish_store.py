@@ -34,6 +34,7 @@ from typing import TypeVar, cast
 import zstandard
 
 from uepyscripts import logger
+from uepyscripts.tools.ugs.progress import TransferProgress
 from uepyscripts.tools.ugs.storage import Storage
 from uepyscripts.tools.ugs.ugs_types import HashCacheManifest, Manifest, VersionManifest
 
@@ -138,7 +139,13 @@ class PublishStore:
         first, then moved over it."""
         paths = list(paths)
         logger.info(f"Downloading {len(paths)} file(s)")
-        self._parallel(lambda p: self._download_blob(manifest[p], root / p), paths)
+        with TransferProgress("Downloading", len(paths)) as progress:
+
+            def download_one(path: str) -> None:
+                self._download_blob(manifest[path], root / path)
+                progress.advance()
+
+            self._parallel(download_one, paths)
 
     def prune(self, remove: Iterable[str], blob_grace: timedelta, now: datetime | None = None) -> PruneResult:
         """Removes the Manifests (and Symbols manifests) of `remove`, then deletes
@@ -258,7 +265,13 @@ class PublishStore:
 
         with tempfile.TemporaryDirectory(prefix="publish-blobs-") as tmp:
             tmp_dir = Path(tmp)
-            self._parallel(lambda h: self._upload_blob(h, root / path_for_hash[h], tmp_dir), missing)
+            with TransferProgress("Uploading", len(missing)) as progress:
+
+                def upload_one(file_hash: str) -> None:
+                    self._upload_blob(file_hash, root / path_for_hash[file_hash], tmp_dir)
+                    progress.advance()
+
+                self._parallel(upload_one, missing)
 
         return PublishResult(uploaded_blobs=len(missing), reused_blobs=len(path_for_hash) - len(missing))
 
