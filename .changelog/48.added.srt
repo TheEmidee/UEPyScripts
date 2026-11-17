@@ -1,0 +1,1 @@
+ue-ugs-push and ue-ugs-pull now show their progress while uploading and downloading files ("Uploading file x/y"), with a progress bar in a terminal and a log line every 10% otherwise.
