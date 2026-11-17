@@ -1,0 +1,1 @@
+Added `--force-symbol-store-upload` to ue-ugs-push, to index every symbol file into the symbol store even when the commit is already published. Added `--upload-symbols-to-s3` to ue-ugs-push, to also upload the PDB files to the S3 bucket, and the `[UGS] SyncSymbols` config key so ue-ugs-pull syncs them.
