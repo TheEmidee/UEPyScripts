@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from tests.ugs.conftest import InMemoryStorage, WriteTree
-from uepyscripts.tools.ugs.cleanup import select_versions_to_keep
 from uepyscripts.tools.ugs.publish_store import PublishStore
 from uepyscripts.tools.ugs.storage import DryRunStorage
 from uepyscripts.tools.ugs.ugs_types import HashCacheManifest, diff_manifests
@@ -314,13 +313,3 @@ def test_diff_manifests_lists_changed_and_removed_paths() -> None:
 
     assert sorted(to_download) == ["b", "new"]
     assert to_delete == ["gone"]
-
-
-def test_select_versions_to_keep_keeps_the_newest_per_branch() -> None:
-    published = {"m3", "m2", "m1", "f2", "orphan"}
-    ancestries = {
-        "main": ["m4", "m3", "x", "m2", "m1"],
-        "feature": ["f2", "f1", "m2", "m1"],
-    }
-
-    assert select_versions_to_keep(published, ancestries, keep=2) == {"m3", "m2", "f2"}

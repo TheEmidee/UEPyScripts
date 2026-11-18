@@ -77,6 +77,10 @@ Per-file fingerprints recorded at a commit so the next publish can skip re-hashi
 The Manifests, Symbols manifests, Blobs, Hash caches and symbol-store manifest kept in the bucket, treated as one thing.
 _Avoid_: bucket (when you mean its contents), binary cache
 
+**Retention**:
+Deciding which Versions stay in the Publish store and removing the rest: the newest few Versions along each remote branch's ancestry are kept, and every other Version goes, including those no remote branch reaches any more. Blobs no remaining Version references are deleted once they are older than a grace period. Retention refuses to delete anything when the clone is shallow or the remote has no branches. It is the only thing that deletes from the Publish store.
+_Avoid_: cleanup (that is the command), garbage collection (that is only the Blob step)
+
 **Sync**:
 Making the local engine tree match one Version's Manifest (plus its Symbols manifest, when the Project config asks for symbols): downloading the files whose hash differs from the Sync state and deleting the ones no longer tracked. The target is the nearest Version in HEAD's ancestry, or the latest Version when none is (history was rewritten).
 _Avoid_: pull (that is the command), download (that is one step)
