@@ -3,8 +3,10 @@ Syncs the local engine + game binaries to the current git HEAD, or to its
 nearest published ancestor, from the Publish store (see sync.py for the
 workflow and publish_store.py for the Publish store).
 
-PDB files are never downloaded here: they are served on demand by the symbol
-store. Configure your debugger's symbol path separately.
+PDB files are only downloaded when the [UGS] SyncSymbols config key is set,
+and only for Versions pushed with --upload-symbols-to-s3. Otherwise they are
+served on demand by the symbol store: configure your debugger's symbol path
+separately.
 """
 
 import argparse
@@ -62,7 +64,11 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
     root_folder = workspace.engine.root_path
     warn_if_source_dirty(root_folder)
 
-    outcome = sync_version(store, root_folder, get_local_ancestry(root_folder))
+    sync_symbols = workspace.config.ugs.sync_symbols
+    if sync_symbols:
+        logger.info("Symbol files will be synced too ([UGS] SyncSymbols)")
+
+    outcome = sync_version(store, root_folder, get_local_ancestry(root_folder), with_symbols=sync_symbols)
 
     if outcome.version is None:
         logger.info("Nothing has been published yet — nothing to sync.")
@@ -75,6 +81,9 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
             f"the latest published version ({outcome.version[:8]}), which may not exactly "
             f"match your current source. You may need a local rebuild."
         )
+
+    if sync_symbols and not outcome.with_symbols:
+        logger.warning(f"{outcome.version[:8]} was published without symbol files (push without --upload-symbols-to-s3): none synced")
 
     if outcome.already_synced:
         logger.info(f"Already up to date ({outcome.version})")

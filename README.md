@@ -112,6 +112,11 @@ AWS_BucketName = my-bucket
 AWS_Region = eu-west-1
 AWS_AccessKey = ...
 AWS_SecretKey = ...
+
+[UGS]
+; ue-ugs-pull also syncs the PDB files, for the Versions pushed with ue-ugs-push --upload-symbols-to-s3 (default: False).
+; Usually set per user, in a git-ignored file such as config.local.ini
+SyncSymbols = True
 ```
 
 ## Continuous Integration ⚙️

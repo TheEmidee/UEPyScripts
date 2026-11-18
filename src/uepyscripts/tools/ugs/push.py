@@ -4,6 +4,10 @@ publish.py for the workflow and publish_store.py for the Publish store):
   - the Tracked files are hashed, every content the bucket doesn't have yet is
     uploaded as a Blob, then the Manifest of the current commit is written
   - PDB/DLL/EXE files are additionally indexed into a Windows symbol store
+  - with --upload-symbols-to-s3, the PDB files are also uploaded to the bucket
+    (as the Version's Symbols manifest), for ugs.pull to sync when the
+    [UGS] SyncSymbols config key is set. Both symbol destinations can be used
+    in the same run
   - Versions are keyed by git commit SHA (no git push required)
   - Retention is handled by ugs.cleanup, never here
 
@@ -38,6 +42,19 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--disable-symbol-store-upload", action=argparse.BooleanOptionalAction)
     parser.add_argument("--symbol-store-path", type=str, help=("Path of the shared symbol store folder"))
     parser.add_argument(
+        "--force-symbol-store-upload",
+        action=argparse.BooleanOptionalAction,
+        help=("Index every symbol file into the symbol store, even if the commit is already published or the files were indexed before"),
+    )
+    parser.add_argument(
+        "--upload-symbols-to-s3",
+        action=argparse.BooleanOptionalAction,
+        help=(
+            "Also upload the PDB files to the S3 bucket, next to the binaries, so ue-ugs-pull can sync them. "
+            "Independent of the symbol store: pass --disable-symbol-store-upload to only use S3"
+        ),
+    )
+    parser.add_argument(
         "--keep_hash_caches",
         type=int,
         default=DEFAULT_KEEP_HASH_CACHES,
@@ -61,7 +78,10 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
     store = open_publish_store(workspace, args)
 
     symbol_indexer: SymbolIndexer | None = None
-    if args.disable_symbol_store_upload:
+    if args.disable_symbol_store_upload and args.force_symbol_store_upload:
+        logger.fatal("--force-symbol-store-upload can't be combined with --disable-symbol-store-upload")
+        exit(1)
+    elif args.disable_symbol_store_upload:
         logger.info("Upload on the symbol store is disabled")
     elif not args.symbol_store_path:
         logger.fatal("Pass --symbol-store-path, or --disable-symbol-store-upload to skip the symbol store")
@@ -85,10 +105,17 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
         symbol_indexer=symbol_indexer,
         skip_upload=bool(args.skip_upload),
         keep_hash_caches=args.keep_hash_caches,
+        force_symbol_index=bool(args.force_symbol_store_upload),
+        upload_symbols=bool(args.upload_symbols_to_s3),
     )
 
     if outcome.already_published:
-        logger.info(f"{commit} already published, skipping (likely a CI re-run of an already-built commit)")
+        if outcome.indexed_symbol_files:
+            logger.info(f"{commit} already published, indexed {outcome.indexed_symbol_files} symbol file(s) (--force-symbol-store-upload)")
+        if outcome.published_symbol_files:
+            logger.info(f"{commit} already published, uploaded its {outcome.published_symbol_files} symbol file(s) to S3 (--upload-symbols-to-s3)")
+        if not outcome.indexed_symbol_files and not outcome.published_symbol_files:
+            logger.info(f"{commit} already published, skipping (likely a CI re-run of an already-built commit)")
         return
 
     logger.info("Saving list of changed files in Engine/Saved/changed_files.txt")
@@ -101,6 +128,8 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
         return
 
     logger.info(f"Published {commit}: {outcome.uploaded_blobs} new blob(s), {outcome.reused_blobs} reused")
+    if args.upload_symbols_to_s3:
+        logger.info(f"Uploaded {outcome.published_symbol_files} symbol file(s) to S3")
     logger.info("=== Finished processing binary files ===")
 
 
