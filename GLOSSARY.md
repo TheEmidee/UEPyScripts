@@ -33,11 +33,11 @@ _Avoid_: config entry, settings group
 ## BuildGraph
 
 **BuildGraph command**:
-One UAT BuildGraph invocation: the script, one target or one Single node, the project, script folders, properties, build-machine and shared-storage flags, and extra arguments that override generated ones with the same key.
+One UAT BuildGraph invocation: the script, either one target or one Single node (a Single node brings its Shared storage), the project, script folders, properties, whether it runs on a build machine, and extra arguments that override generated ones with the same key.
 _Avoid_: buildgraph args, UAT arguments (when you mean the whole invocation)
 
 **Single node**:
-Running one node of a BuildGraph graph on its own, sharing its inputs and outputs with other agents through the Shared storage. Only CI (`ue-ci-run-buildgraph`) runs Single nodes, one per task.
+Running one node of a BuildGraph graph on its own, sharing its inputs and outputs with other agents through the Shared storage. Only CI (`ue-ci-run-buildgraph`) runs Single nodes, one per task. Before one runs, this machine's BuildGraph, Jenkins and Tests Saved folders are reset, and only once its BuildGraph command is valid.
 _Avoid_: task (when you mean the BuildGraph node)
 
 **Build tag**:

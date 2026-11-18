@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from ... import logger
-from ...internal.buildgraph import BuildGraphCommand
+from ...internal.buildgraph import BuildGraphCommand, Target
 from ...internal.workspace import add_uproject_argument, open_workspace
-from .shared_storage import SharedStorage
+from .single_node import single_node_command
 
 
 def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
@@ -34,22 +34,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.no_single_node:
             logger.info("The flag --no-single-node was passed. Run the task with Target and not with SingleNode")
             command = BuildGraphCommand.for_workspace(
-                workspace, target=args.target, script=args.script, extra_args=extra_arguments, build_machine=True, no_p4=True
+                workspace, Target(args.target), script=args.script, extra_args=extra_arguments, build_machine=True
             )
         else:
-            shared_storage = SharedStorage.for_build(workspace, args.build_tag)
-            shared_storage.prepare_single_node(args.target)
-
-            command = BuildGraphCommand.for_workspace(
-                workspace,
-                single_node=args.target,
-                script=args.script,
-                extra_args=extra_arguments,
-                build_machine=True,
-                no_p4=True,
-                shared_storage=shared_storage.path,
-                write_to_shared_storage=True,
-            )
+            command = single_node_command(workspace, args.target, args.build_tag, script=args.script, extra_args=extra_arguments)
 
         return workspace.engine.uat(command.uat_arguments())
 
