@@ -46,7 +46,9 @@ dependencies = [
   "types-invoke",
   "GameDevTools",
   "blake3",
-  "zstandard"
+  "zstandard",
+  "tqdm",
+  "types-tqdm"
 ]
 
 urls.Changelog = "https://github.com/TheEmidee/UEPyScripts/releases"
