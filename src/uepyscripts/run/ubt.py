@@ -1,17 +1,19 @@
 import argparse
+from typing import Optional, Sequence
 
+from uepyscripts.internal.process import ProcessRunner
 from uepyscripts.internal.workspace import add_uproject_argument, open_workspace
 
 
-def main() -> int:
+def main(argv: Optional[Sequence[str]] = None, *, runner: Optional[ProcessRunner] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run UBT. Every argument except --uproject-path is forwarded to UBT.", allow_abbrev=False, add_help=False
     )
     add_uproject_argument(parser)
 
-    args, forwarded_arguments = parser.parse_known_args()
+    args, forwarded_arguments = parser.parse_known_args(argv)
 
-    with open_workspace(args) as workspace:
+    with open_workspace(args, runner=runner) as workspace:
         return workspace.engine.ubt(forwarded_arguments)
 
 

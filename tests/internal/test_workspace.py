@@ -4,26 +4,18 @@ from pathlib import Path
 
 import pytest
 
+from tests.fakes import DictRegistry, RecordingRunner, tool, write_build_version, write_uproject
+from uepyscripts.internal.engine_locator import REGISTERED_BUILDS_KEY, EngineLocator
 from uepyscripts.internal.workspace import (
     EngineNotFoundError,
+    InvalidEngineError,
+    InvalidProjectError,
     ProjectNotFoundError,
     Workspace,
+    WorkspaceError,
     add_uproject_argument,
     open_workspace,
 )
-
-
-def write_build_version(root: Path) -> None:
-    build_folder = root / "Engine" / "Build"
-    build_folder.mkdir(parents=True, exist_ok=True)
-    (build_folder / "Build.version").write_text(json.dumps({"MajorVersion": 5, "MinorVersion": 4, "PatchVersion": 2}))
-
-
-def write_uproject(folder: Path, engine_association: str = "") -> Path:
-    folder.mkdir(parents=True, exist_ok=True)
-    uproject = folder / f"{folder.name}.uproject"
-    uproject.write_text(json.dumps({"EngineAssociation": engine_association}))
-    return uproject
 
 
 @pytest.fixture
@@ -65,6 +57,33 @@ def test_missing_uproject_raises_project_not_found(tmp_path: Path) -> None:
         Workspace(tmp_path / "Missing" / "Missing.uproject")
 
 
+def test_no_uproject_above_the_current_folder_raises_project_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ProjectNotFoundError):
+        Workspace()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("{ not json", id="not json"),
+        pytest.param(json.dumps({"FileVersion": 3}), id="no EngineAssociation"),
+        pytest.param(json.dumps({"EngineAssociation": 5.4}), id="EngineAssociation not a string"),
+        pytest.param(json.dumps(["EngineAssociation"]), id="not an object"),
+    ],
+)
+def test_a_malformed_uproject_raises_invalid_project(tmp_path: Path, content: str) -> None:
+    uproject = write_uproject(tmp_path / "Game")
+    uproject.write_text(content)
+
+    with pytest.raises(InvalidProjectError) as error:
+        Workspace(uproject)
+
+    assert str(uproject.resolve()) in str(error.value)
+    assert isinstance(error.value, WorkspaceError)
+
+
 def test_config_is_readable_without_an_engine(tmp_path: Path) -> None:
     uproject = write_uproject(tmp_path / "Game")
     config_folder = tmp_path / "Game" / "Config" / "PyScripts"
@@ -91,12 +110,79 @@ def test_missing_engine_raises_then_a_later_access_succeeds(tmp_path: Path) -> N
     uproject = write_uproject(tmp_path / "Game")
     workspace = Workspace(uproject)
 
-    with pytest.raises(EngineNotFoundError):
+    with pytest.raises(EngineNotFoundError) as error:
         _ = workspace.engine
+
+    assert "Build.version" in str(error.value)
 
     write_build_version(tmp_path)
 
     assert workspace.engine.root_path == tmp_path
+
+
+def test_an_engine_no_step_locates_raises_engine_not_found(tmp_path: Path) -> None:
+    uproject = write_uproject(tmp_path / "Game", engine_association="MyBuild")
+    workspace = Workspace(uproject, locator=EngineLocator(DictRegistry(), {}))
+
+    with pytest.raises(EngineNotFoundError):
+        _ = workspace.engine
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("{ not json", id="not json"),
+        pytest.param(json.dumps({"MajorVersion": 5, "MinorVersion": 4}), id="no PatchVersion"),
+        pytest.param(json.dumps({"MajorVersion": 5, "MinorVersion": 4, "PatchVersion": "two"}), id="not a number"),
+        pytest.param(json.dumps([5, 4, 2]), id="not an object"),
+    ],
+)
+def test_a_malformed_build_version_raises_invalid_engine(tmp_path: Path, content: str) -> None:
+    build_version = write_build_version(tmp_path, content)
+    workspace = Workspace(write_uproject(tmp_path / "Game"))
+
+    with pytest.raises(InvalidEngineError) as error:
+        _ = workspace.engine
+
+    assert str(build_version.resolve()) in str(error.value)
+
+
+def test_a_malformed_jenkins_build_version_raises_invalid_engine(tmp_path: Path) -> None:
+    build_version = write_build_version(tmp_path)
+    jenkins_version = build_version.with_name("JenkinsBuild.version")
+    jenkins_version.write_text("not a version")
+    workspace = Workspace(write_uproject(tmp_path / "Game"))
+
+    with pytest.raises(InvalidEngineError) as error:
+        _ = workspace.engine
+
+    assert str(jenkins_version.resolve()) in str(error.value)
+
+
+def test_the_jenkins_build_number_is_appended_to_the_version(native_layout: Path) -> None:
+    build_version = native_layout.parent.parent / "Engine" / "Build" / "Build.version"
+    build_version.with_name("JenkinsBuild.version").write_text("42\n")
+
+    assert str(Workspace(native_layout).engine.version) == "5.4.2.42"
+
+
+def test_the_engine_is_located_through_the_given_locator(tmp_path: Path) -> None:
+    engine_root = tmp_path / "Engines" / "MyBuild"
+    write_build_version(engine_root)
+    registry = DictRegistry({("HKCU", REGISTERED_BUILDS_KEY, "MyBuild"): str(engine_root)})
+    uproject = write_uproject(tmp_path / "Game", engine_association="MyBuild")
+
+    workspace = Workspace(uproject, locator=EngineLocator(registry, {}))
+
+    assert workspace.engine.root_path == engine_root
+
+
+def test_engine_tools_launch_through_the_given_runner(native_layout: Path, tmp_path: Path) -> None:
+    runner = RecordingRunner(exit_code=3)
+    workspace = Workspace(native_layout, runner=runner)
+
+    assert workspace.engine.uat(["BuildCookRun"]) == 3
+    assert runner.ran == [[tool(tmp_path, "Build", "BatchFiles", "RunUAT.bat"), "BuildCookRun"]]
 
 
 def test_native_layout_is_detected_as_native(native_layout: Path, tmp_path: Path) -> None:
@@ -123,6 +209,18 @@ def test_open_workspace_exits_on_missing_project(tmp_path: Path) -> None:
     assert exit_info.value.code == 1
 
 
+def test_open_workspace_exits_on_a_malformed_project(tmp_path: Path) -> None:
+    uproject = write_uproject(tmp_path / "Game")
+    uproject.write_text("{ not json")
+    args, _ = uproject_args("--uproject-path", str(uproject))
+
+    with pytest.raises(SystemExit) as exit_info:
+        with open_workspace(args):
+            pass
+
+    assert exit_info.value.code == 1
+
+
 def test_open_workspace_exits_on_missing_engine_inside_the_block(tmp_path: Path) -> None:
     args, _ = uproject_args("--uproject-path", str(write_uproject(tmp_path / "Game")))
 
@@ -131,6 +229,16 @@ def test_open_workspace_exits_on_missing_engine_inside_the_block(tmp_path: Path)
             _ = workspace.engine
 
     assert exit_info.value.code == 1
+
+
+def test_open_workspace_launches_engine_tools_through_the_given_runner(native_layout: Path) -> None:
+    runner = RecordingRunner()
+    args, _ = uproject_args("--uproject-path", str(native_layout))
+
+    with open_workspace(args, runner=runner) as workspace:
+        workspace.engine.launch_editor()
+
+    assert len(runner.started) == 1
 
 
 def test_open_workspace_lets_other_errors_through(native_layout: Path) -> None:

@@ -4,24 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.fakes import RecordingRunner, tool
 from uepyscripts.internal.engine import Engine
 from uepyscripts.internal.errors import WorkspaceError
 from uepyscripts.internal.process import EngineToolNotStartedError, PopenRunner
 from uepyscripts.internal.project import Project
-
-
-class RecordingRunner:
-    def __init__(self, exit_code: int = 0) -> None:
-        self.exit_code = exit_code
-        self.ran: list[list[str]] = []
-        self.started: list[list[str]] = []
-
-    def run(self, argv: list[str]) -> int:
-        self.ran.append(argv)
-        return self.exit_code
-
-    def start(self, argv: list[str]) -> None:
-        self.started.append(argv)
 
 
 @pytest.fixture
@@ -44,10 +31,6 @@ def project(engine_root: Path) -> Project:
 
 def make_engine(project: Project, engine_root: Path, runner: RecordingRunner) -> Engine:
     return Engine(project, engine_root, runner)
-
-
-def tool(engine_root: Path, *parts: str) -> str:
-    return str((engine_root / "Engine").resolve().joinpath(*parts))
 
 
 def test_engine_builds_without_any_engine_tool(project: Project, engine_root: Path) -> None:
