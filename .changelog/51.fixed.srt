@@ -1,0 +1,1 @@
+ue-ugs-push now refuses to publish when GIT_COMMIT is not in the checkout, instead of publishing under that SHA. On a detached HEAD, the logged branch is no longer "origin" and keeps the full name of local branches such as feature/foo.
