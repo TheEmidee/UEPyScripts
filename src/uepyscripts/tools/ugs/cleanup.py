@@ -11,8 +11,8 @@ from datetime import timedelta
 
 from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
+from uepyscripts.tools.ugs.commit_history import CommitHistory
 from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
-from uepyscripts.tools.ugs.git_utils import get_remote_branch_ancestries, is_shallow_repository
 from uepyscripts.tools.ugs.retention import retain_versions
 
 
@@ -55,12 +55,12 @@ def main() -> None:
 
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
+    history = CommitHistory(workspace.engine.root_path, remote=args.remote)
     store = open_publish_store(workspace, args, dry_run=args.dry_run)
-    root = workspace.engine.root_path
 
-    shallow = is_shallow_repository(root)
-    logger.info(f"Fetching '{args.remote}' and computing the ancestry of each branch")
-    branch_ancestries = get_remote_branch_ancestries(root, args.remote)
+    shallow = history.is_shallow()
+    logger.info(f"Fetching '{history.remote}' and computing the ancestry of each branch")
+    branch_ancestries = history.remote_branch_ancestries()
 
     outcome = retain_versions(
         store,

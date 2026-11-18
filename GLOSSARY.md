@@ -50,6 +50,10 @@ _Avoid_: shared storage dir (when you mean the whole build's folder), NAS
 
 ## Binary publishing (UGS)
 
+**Commit history**:
+What the engine tree's git repository says about commits: the current commit (Jenkins' `GIT_COMMIT` when set, else HEAD), its ancestry, newest first, the ancestry of every branch of the remote, and whether the clone is shallow. The ancestry always starts from the current commit. A shallow clone is deepened before its ancestry is read, and when that fails the local history is used.
+_Avoid_: git utils, repo (when you mean what it answers)
+
 **Version**:
 A commit SHA whose engine and game binaries have been published. A Version exists exactly when its Manifest exists in the Publish store.
 _Avoid_: build, release, publish (as a noun)
