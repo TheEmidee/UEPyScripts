@@ -1,0 +1,1 @@
+ue-ugs-cleanup now refuses a --keep-versions value below 1 without deleting anything. Before, 0 deleted every published version and a negative value kept all but the oldest ones.
