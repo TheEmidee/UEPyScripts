@@ -10,29 +10,12 @@ separately.
 """
 
 import argparse
-import subprocess
-from pathlib import Path
 
 from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
+from uepyscripts.tools.ugs.commit_history import CommitHistory
 from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
-from uepyscripts.tools.ugs.git_utils import get_local_ancestry
 from uepyscripts.tools.ugs.sync import sync_version
-
-
-def warn_if_source_dirty(root_folder: Path) -> None:
-    result = subprocess.run(
-        ["git", "status", "--porcelain", "--", "Engine/Source"],
-        cwd=root_folder,
-        capture_output=True,
-        text=True,
-    )
-    if result.stdout.strip():
-        logger.warning(
-            "You have uncommitted changes under Engine/Source (or the game project's "
-            "Source folder). Synced binaries reflect the last committed state only — "
-            "you'll likely need to rebuild before your local changes take effect."
-        )
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -60,15 +43,21 @@ def main() -> None:
 
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
-    store = open_publish_store(workspace, args)
     root_folder = workspace.engine.root_path
-    warn_if_source_dirty(root_folder)
+    history = CommitHistory(root_folder)
+    store = open_publish_store(workspace, args)
+
+    if history.has_uncommitted_changes("Engine/Source"):
+        logger.warning(
+            "You have uncommitted changes under Engine/Source. Synced binaries reflect the last committed state only — "
+            "you'll likely need to rebuild before your local changes take effect."
+        )
 
     sync_symbols = workspace.config.ugs.sync_symbols
     if sync_symbols:
         logger.info("Symbol files will be synced too ([UGS] SyncSymbols)")
 
-    outcome = sync_version(store, root_folder, get_local_ancestry(root_folder), with_symbols=sync_symbols)
+    outcome = sync_version(store, root_folder, history.ancestry(), with_symbols=sync_symbols)
 
     if outcome.version is None:
         logger.info("Nothing has been published yet — nothing to sync.")

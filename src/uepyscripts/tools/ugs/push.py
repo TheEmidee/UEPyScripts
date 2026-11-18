@@ -18,8 +18,8 @@ import argparse
 
 from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
+from uepyscripts.tools.ugs.commit_history import CommitHistory
 from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
-from uepyscripts.tools.ugs.git_utils import get_current_branch, get_current_sha, get_local_ancestry
 from uepyscripts.tools.ugs.publish import DEFAULT_KEEP_HASH_CACHES, ENGINE_TRACKED_FILES, SymbolIndexer, SymStoreIndexer, publish_version
 
 
@@ -75,6 +75,9 @@ def main() -> None:
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
     project = workspace.project
+    engine = workspace.engine
+    root = engine.root_path
+    history = CommitHistory(root)
     store = open_publish_store(workspace, args)
 
     symbol_indexer: SymbolIndexer | None = None
@@ -89,19 +92,17 @@ def run(workspace: Workspace, args: argparse.Namespace) -> None:
     else:
         symbol_indexer = SymStoreIndexer(args.symbol_store_path, project.project_name)
 
-    engine = workspace.engine
-    root = engine.root_path
-    commit = get_current_sha(root)
+    commit = history.current_commit()
 
     logger.info("=== Publish binary files ===")
-    logger.info(f"Current branch: {get_current_branch(root)}")
+    logger.info(f"Current branch: {history.branch()}")
 
     outcome = publish_version(
         store,
         ENGINE_TRACKED_FILES,
         root,
         commit,
-        get_local_ancestry(root),
+        history.ancestry(),
         symbol_indexer=symbol_indexer,
         skip_upload=bool(args.skip_upload),
         keep_hash_caches=args.keep_hash_caches,

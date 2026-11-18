@@ -1,0 +1,1 @@
+ue-ugs-push, ue-ugs-pull and ue-ugs-cleanup now report git problems as one error line instead of a traceback. When Jenkins sets GIT_COMMIT, the ancestry used to find the nearest published version now starts at that commit, and ue-ugs-cleanup also deepens a shallow clone from the --remote it was given.
