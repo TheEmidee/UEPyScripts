@@ -2,14 +2,17 @@
 The BuildGraph command: one UAT BuildGraph invocation, built from structured
 inputs instead of argv strings.
 
-`BuildGraphCommand.uat_arguments()` is pure. `BuildGraphCommand.for_workspace`
-fills in what comes from the Workspace (the script, the project, script
-folders and shared properties from the Project config) and validates it.
+A command runs either one `Target` or one `SingleNode`, which brings its
+Shared storage. `BuildGraphCommand.uat_arguments()` is pure.
+`BuildGraphCommand.for_workspace` fills in what comes from the Workspace (the
+script, the project, script folders and shared properties from the Project
+config) and validates it, without touching the disk.
 
 There is a single override rule: an extra argument whose key matches a
 generated one drops the generated one. A key is the argument up to its first
 `=` or `:`, compared case-insensitively, except `-set:Name=Value`, whose key
-is the property name.
+is the property name. So `-set:clean=False` on the command line replaces the
+`Clean` shared property of the Project config.
 """
 
 from collections.abc import Sequence
@@ -26,7 +29,7 @@ SET_PREFIX = "-set:"
 
 
 class BuildGraphError(WorkspaceError):
-    """The BuildGraph command can't be built: a bad script, or not exactly one of target and Single node."""
+    """The BuildGraph command can't be built: the script is missing or not an XML file."""
 
 
 def argument_key(argument: str) -> str:
@@ -40,35 +43,43 @@ def argument_key(argument: str) -> str:
 
 
 @dataclass(frozen=True)
+class Target:
+    """Run one target of the graph, and every node it depends on."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class SingleNode:
+    """Run one node of the graph on its own, reading its inputs from and
+    writing its outputs to `shared_storage`."""
+
+    name: str
+    shared_storage: Path
+
+
+@dataclass(frozen=True)
 class BuildGraphCommand:
     script: Path
     uproject_path: Path
-    target: Optional[str] = None
-    single_node: Optional[str] = None
+    run: Target | SingleNode
     script_dirs: list[Path] = field(default_factory=list)
     properties: dict[str, str] = field(default_factory=dict)
     build_machine: bool = False
-    no_p4: bool = False
-    shared_storage: Optional[Path] = None
-    write_to_shared_storage: bool = False
     extra_args: list[str] = field(default_factory=list)
 
     def uat_arguments(self) -> list[str]:
         """The arguments to pass to UAT, starting with `BuildGraph`."""
         generated = [f"-script={self.script}"]
-        generated.append(f"-target={self.target}" if self.target else f"-SingleNode={self.single_node}")
+        generated.append(f"-target={self.run.name}" if isinstance(self.run, Target) else f"-SingleNode={self.run.name}")
         generated.append(f"-Project={self.uproject_path}")
         generated += [f"-ScriptDir={script_dir}" for script_dir in self.script_dirs]
         generated += [f"{SET_PREFIX}{name}={value}" for name, value in self.properties.items()]
 
         if self.build_machine:
-            generated.append("-BuildMachine")
-        if self.no_p4:
-            generated.append("-NoP4")
-        if self.shared_storage:
-            generated.append(f"-SharedStorageDir={self.shared_storage}")
-        if self.write_to_shared_storage:
-            generated.append("-WriteToSharedStorage")
+            generated += ["-BuildMachine", "-NoP4"]
+        if isinstance(self.run, SingleNode):
+            generated += [f"-SharedStorageDir={self.run.shared_storage}", "-WriteToSharedStorage"]
 
         overridden = {argument_key(argument) for argument in self.extra_args}
         return ["BuildGraph", *(argument for argument in generated if argument_key(argument) not in overridden), *self.extra_args]
@@ -77,25 +88,18 @@ class BuildGraphCommand:
     def for_workspace(
         cls,
         workspace: Workspace,
+        run: Target | SingleNode,
         *,
-        target: Optional[str] = None,
-        single_node: Optional[str] = None,
         script: Optional[Path] = None,
         extra_args: Sequence[str] = (),
         build_machine: bool = False,
-        no_p4: bool = False,
-        shared_storage: Optional[Path] = None,
-        write_to_shared_storage: bool = False,
     ) -> "BuildGraphCommand":
         """Builds the command for the Workspace's project.
 
         The script is `script`, or else `[Project] BuildgraphPath`. Script folders
-        that don't exist are skipped with a warning. `-set:Name=Value` extra
-        arguments are merged over `[Project] BuildgraphSharedProperties`, the
-        command line winning, so each property is passed once."""
-        if bool(target) == bool(single_node):
-            raise BuildGraphError("Pass exactly one of a target and a Single node")
-
+        that don't exist are skipped with a warning. The shared properties are
+        `[Project] BuildgraphSharedProperties`; a `-set:` extra argument
+        replaces the one with the same name."""
         project_section = workspace.config.project
         script_path = cls._resolve_script(workspace, script)
 
@@ -111,30 +115,14 @@ class BuildGraphCommand:
         if not project_section.automation_scripts_directories:
             logger.info("No automation scripts directory is set")
 
-        properties = dict(project_section.buildgraph_shared_properties)
-        remaining_args: list[str] = []
-        for argument in extra_args:
-            if argument.lower().startswith(SET_PREFIX):
-                name, _, value = argument[len(SET_PREFIX) :].partition("=")
-                properties[name] = value
-            else:
-                remaining_args.append(argument)
-
-        if not properties:
-            logger.info("No shared properties to set")
-
         return cls(
             script=script_path,
             uproject_path=workspace.project.uproject_path,
-            target=target,
-            single_node=single_node,
+            run=run,
             script_dirs=script_dirs,
-            properties=properties,
+            properties=dict(project_section.buildgraph_shared_properties),
             build_machine=build_machine,
-            no_p4=no_p4,
-            shared_storage=shared_storage,
-            write_to_shared_storage=write_to_shared_storage,
-            extra_args=remaining_args,
+            extra_args=list(extra_args),
         )
 
     @staticmethod

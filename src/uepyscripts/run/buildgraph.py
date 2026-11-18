@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .. import logger
-from ..internal.buildgraph import BuildGraphCommand
+from ..internal.buildgraph import BuildGraphCommand, Target
 from ..internal.workspace import add_uproject_argument, open_workspace
 
 
@@ -23,7 +23,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logger.info(f"Arguments : {extra_arguments}")
 
     with open_workspace(args) as workspace:
-        command = BuildGraphCommand.for_workspace(workspace, target=args.target, script=args.script, extra_args=extra_arguments)
+        command = BuildGraphCommand.for_workspace(workspace, Target(args.target), script=args.script, extra_args=extra_arguments)
         return workspace.engine.uat(command.uat_arguments())
 
 

@@ -42,10 +42,10 @@ def test_single_node_runs_with_shared_storage(game: Path, tmp_path: Path, monkey
             f"-script={(game / 'Build' / 'Graph.xml').resolve()}",
             "-SingleNode=Compile Win64",
             f"-Project={(game / 'Game.uproject').resolve()}",
-            "-set:Clean=True",
             "-BuildMachine",
             f"-SharedStorageDir={storage}",
             "-WriteToSharedStorage",
+            "-set:Clean=True",
             "-NoP4",
         ]
     ]

@@ -127,7 +127,7 @@ All those modules are very opinionated and work with specific rules. This may la
 
 Ideally you should be using https://github.com/TheEmidee/JenkinsFileGenerator to generate jenkinsfiles that would use the following modules.
 
-- `uepyscripts.tools.ci.buildgraph` : This executes a buildgraph task. This module will call the internal `uepyscripts.run.buildgraph` but will inject all arguments that are required to execute a single node, using a shared storage folder to store the artifacts of the task. This basically allows to execute buildgraph tasks in parallel. 
+- `uepyscripts.tools.ci.buildgraph` : This executes a buildgraph task as a single node. It injects all arguments that are required to execute a single node on a build machine, using a shared storage folder to store the artifacts of the task. This basically allows to execute buildgraph tasks in parallel. The shared storage folder of the node and the local `Saved` folders are only cleared once the BuildGraph script has been validated. 
 A typical usage of this module in a jenkins pipeline script would look like:
 
   ```groovy
