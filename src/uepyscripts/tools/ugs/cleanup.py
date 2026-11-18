@@ -1,15 +1,9 @@
 """
-Retention for the Publish store (see publish_store.py). Push never deletes
-anything; this is the only place that does.
+Removes the Versions of the Publish store that are no longer needed (see
+retention.py for the rules and publish_store.py for the Publish store). Push
+never deletes anything; this is the only command that does.
 
-  - Keeps the newest --keep-versions Versions along each remote branch's
-    ancestry. Every other Version is removed: the ones beyond that window,
-    and the ones no current remote branch can reach (their branch was
-    deleted). This needs no per-branch bookkeeping in the bucket — it is
-    computed straight from git.
-  - Then deletes every Blob no remaining Manifest references, once it is older
-    than --blob-grace-hours (so Blobs of a push still in progress survive).
-  - Intended to run on a schedule (e.g. a periodic Jenkins job).
+Intended to run on a schedule (e.g. a periodic Jenkins job), from a full clone.
 """
 
 import argparse
@@ -19,15 +13,7 @@ from uepyscripts import logger
 from uepyscripts.internal.workspace import Workspace, add_uproject_argument, open_workspace
 from uepyscripts.tools.ugs.connection import S3_CONFIG_SECTION, add_publish_store_arguments, open_publish_store
 from uepyscripts.tools.ugs.git_utils import get_remote_branch_ancestries, is_shallow_repository
-
-
-def select_versions_to_keep(published: set[str], branch_ancestries: dict[str, list[str]], keep: int) -> set[str]:
-    """The newest `keep` published commits along each branch's ancestry (tip first)."""
-    kept: set[str] = set()
-    for ancestry in branch_ancestries.values():
-        on_branch = [sha for sha in ancestry if sha in published]
-        kept.update(on_branch[:keep])
-    return kept
+from uepyscripts.tools.ugs.retention import retain_versions
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -70,29 +56,22 @@ def main() -> None:
 
 def run(workspace: Workspace, args: argparse.Namespace) -> None:
     store = open_publish_store(workspace, args, dry_run=args.dry_run)
-    engine = workspace.engine
+    root = workspace.engine.root_path
 
-    if is_shallow_repository(engine.root_path):
-        logger.fatal("This is a shallow clone: published commits beyond its depth would look unreachable and get deleted. Run from a full clone.")
-        exit(1)
-
+    shallow = is_shallow_repository(root)
     logger.info(f"Fetching '{args.remote}' and computing the ancestry of each branch")
-    branch_ancestries = get_remote_branch_ancestries(engine.root_path, args.remote)
+    branch_ancestries = get_remote_branch_ancestries(root, args.remote)
 
-    if not branch_ancestries:
-        logger.fatal(f"No branch found on remote '{args.remote}' — aborting without deleting anything")
-        exit(1)
-
-    published = store.versions()
-    kept = select_versions_to_keep(published, branch_ancestries, args.keep_versions)
-    to_remove = published - kept
-
-    logger.info(f"{len(published)} published version(s): keeping {len(kept)}, removing {len(to_remove)}")
-
-    result = store.prune(to_remove, blob_grace=timedelta(hours=args.blob_grace_hours))
+    outcome = retain_versions(
+        store,
+        branch_ancestries,
+        shallow=shallow,
+        keep=args.keep_versions,
+        blob_grace=timedelta(hours=args.blob_grace_hours),
+    )
 
     prefix = "[dry-run] Would have removed" if args.dry_run else "Removed"
-    logger.info(f"{prefix} {len(result.removed_versions)} version(s) and {result.deleted_blobs} blob(s).")
+    logger.info(f"{prefix} {len(outcome.removed_versions)} version(s) and {outcome.deleted_blobs} blob(s).")
 
 
 if __name__ == "__main__":
