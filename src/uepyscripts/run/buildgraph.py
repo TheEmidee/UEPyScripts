@@ -4,6 +4,7 @@ from typing import Optional, Sequence
 
 from .. import logger
 from ..internal.buildgraph import BuildGraphCommand, Target
+from ..internal.process import ProcessRunner
 from ..internal.workspace import add_uproject_argument, open_workspace
 
 
@@ -16,13 +17,13 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     return parser.parse_known_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Optional[Sequence[str]] = None, *, runner: Optional[ProcessRunner] = None) -> int:
     args, extra_arguments = parse_arguments(argv)
 
     logger.info(f"Run Buildgraph - Target : {args.target}")
     logger.info(f"Arguments : {extra_arguments}")
 
-    with open_workspace(args) as workspace:
+    with open_workspace(args, runner=runner) as workspace:
         command = BuildGraphCommand.for_workspace(workspace, Target(args.target), script=args.script, extra_args=extra_arguments)
         return workspace.engine.uat(command.uat_arguments())
 

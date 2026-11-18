@@ -19,7 +19,6 @@ from pydantic_core import ErrorDetails
 
 from uepyscripts import logger
 from uepyscripts.internal.errors import WorkspaceError
-from uepyscripts.internal.project import Project
 
 
 class ConfigError(WorkspaceError):
@@ -177,7 +176,3 @@ def _describe(error: ErrorDetails) -> str:
 
     message = str(error["msg"]).removeprefix("Value error, ")
     return f"{key}: {message} (value: {error['input']!r})"
-
-
-def resolve_config(project: Project) -> Config:
-    return Config(project.project_folders.config.joinpath("PyScripts"), project.root_folder)

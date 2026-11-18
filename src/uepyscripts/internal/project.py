@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from uepyscripts import logger
+from uepyscripts.internal.errors import InvalidProjectError, describe_json_problems
 
 
 class ProjectSavedFolders:
@@ -35,9 +35,12 @@ class Project:
         self.root_folder = uproject_path.parent
         self.project_folders = ProjectFolders(self.root_folder)
 
-        with open(self.uproject_path, "r", encoding="utf-8") as f:
-            json_str = f.read()
-            self.uproject = UProjectFile.model_validate_json(json_str)
+        try:
+            self.uproject = UProjectFile.model_validate_json(self.uproject_path.read_text(encoding="utf-8"))
+        except OSError as e:
+            raise InvalidProjectError(f"Could not read {self.uproject_path}: {e}") from e
+        except ValidationError as e:
+            raise InvalidProjectError(f"Invalid uproject {self.uproject_path}: {describe_json_problems(e)}") from e
 
     @property
     def engine_association(self) -> str:
@@ -91,19 +94,3 @@ def find_parent_with_project_file(starting_path: Path, max_parents: int = 10) ->
             return find_uproject_in_subfolders(path)
 
     return None
-
-
-def resolve_project(uproject_path: Optional[Path] = None) -> Project:
-    if not uproject_path:
-        dir_path = Path.cwd()
-        uproject_path = find_parent_with_project_file(dir_path)
-        if not uproject_path:
-            raise FileNotFoundError(f"Could not find a uproject file from {dir_path}")
-    elif not uproject_path.exists():
-        raise FileNotFoundError(f"{uproject_path} is not a valid file")
-
-    logger.debug(f"Found uproject file at {uproject_path}")
-    project = Project(uproject_path)
-
-    logger.info(project)
-    return project

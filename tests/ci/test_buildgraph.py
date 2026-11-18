@@ -1,42 +1,24 @@
-import argparse
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
-import pytest
-
-from uepyscripts.internal.workspace import Workspace
+from tests.fakes import RecordingRunner, tool
 from uepyscripts.tools.ci import buildgraph as ci_buildgraph
 
 
-class RecordingEngine:
-    def __init__(self) -> None:
-        self.uat_calls: list[list[str]] = []
+def run_ci(game: Path, argv: list[str]) -> list[list[str]]:
+    """Runs ue-ci-run-buildgraph on the `game` project. Returns the arguments of every UAT run."""
+    runner = RecordingRunner()
+    ci_buildgraph.main([*argv, f"--uproject-path={game / 'Game.uproject'}"], runner=runner)
 
-    def uat(self, args: list[str]) -> int:
-        self.uat_calls.append(args)
-        return 0
-
-
-def run_ci(game: Path, argv: list[str], monkeypatch: pytest.MonkeyPatch) -> RecordingEngine:
-    engine = RecordingEngine()
-
-    @contextmanager
-    def fake_open_workspace(args: argparse.Namespace) -> Iterator[SimpleNamespace]:
-        workspace = Workspace(game / "Game.uproject")
-        yield SimpleNamespace(project=workspace.project, config=workspace.config, engine=engine)
-
-    monkeypatch.setattr(ci_buildgraph, "open_workspace", fake_open_workspace)
-    ci_buildgraph.main(argv)
-    return engine
+    uat = tool(game.parent, "Build", "BatchFiles", "RunUAT.bat")
+    assert all(call[0] == uat for call in runner.ran)
+    return [call[1:] for call in runner.ran]
 
 
-def test_single_node_runs_with_shared_storage(game: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    engine = run_ci(game, ["--target=Compile Win64", "--build_tag=jenkins-42", "-set:Clean=True", "-NoP4"], monkeypatch)
+def test_single_node_runs_with_shared_storage(game: Path, tmp_path: Path) -> None:
+    uat_calls = run_ci(game, ["--target=Compile Win64", "--build_tag=jenkins-42", "-set:Clean=True", "-NoP4"])
 
     storage = tmp_path / "Storage" / "jenkins-42"
-    assert engine.uat_calls == [
+    assert uat_calls == [
         [
             "BuildGraph",
             f"-script={(game / 'Build' / 'Graph.xml').resolve()}",
@@ -51,10 +33,10 @@ def test_single_node_runs_with_shared_storage(game: Path, tmp_path: Path, monkey
     ]
 
 
-def test_no_single_node_runs_the_target_without_shared_storage(game: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    engine = run_ci(game, ["--target=Compile Win64", "--build_tag=jenkins-42", "--no-single-node"], monkeypatch)
+def test_no_single_node_runs_the_target_without_shared_storage(game: Path) -> None:
+    uat_calls = run_ci(game, ["--target=Compile Win64", "--build_tag=jenkins-42", "--no-single-node"])
 
-    assert engine.uat_calls == [
+    assert uat_calls == [
         [
             "BuildGraph",
             f"-script={(game / 'Build' / 'Graph.xml').resolve()}",
@@ -67,10 +49,10 @@ def test_no_single_node_runs_the_target_without_shared_storage(game: Path, monke
     assert not (game / "Saved").exists()
 
 
-def test_explicit_script_is_used(game: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_explicit_script_is_used(game: Path, tmp_path: Path) -> None:
     other = tmp_path / "Other.xml"
     other.write_text("<BuildGraph/>")
 
-    engine = run_ci(game, ["--target=T", "--build_tag=b", "--no-single-node", f"--script={other}"], monkeypatch)
+    uat_calls = run_ci(game, ["--target=T", "--build_tag=b", "--no-single-node", f"--script={other}"])
 
-    assert engine.uat_calls[0][1] == f"-script={other}"
+    assert uat_calls[0][1] == f"-script={other}"

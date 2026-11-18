@@ -1,26 +1,15 @@
 import json
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
+from tests.fakes import DictRegistry
 from uepyscripts.internal.engine_locator import (
     LAUNCHER_INSTALL_KEY,
     REGISTERED_BUILDS_KEY,
     EngineLocator,
-    Hive,
 )
 from uepyscripts.internal.project import Project
-
-
-class DictRegistry:
-    def __init__(self, values: Optional[dict[tuple[Hive, str, str], str]] = None) -> None:
-        self.values = values or {}
-        self.reads: list[tuple[Hive, str, str]] = []
-
-    def read(self, hive: Hive, key: str, name: str) -> Optional[str]:
-        self.reads.append((hive, key, name))
-        return self.values.get((hive, key, name))
 
 
 def make_project(folder: Path, engine_association: str) -> Project:

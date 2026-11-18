@@ -5,6 +5,7 @@ from typing import Optional, Sequence
 
 from ... import logger
 from ...internal.buildgraph import BuildGraphCommand, Target
+from ...internal.process import ProcessRunner
 from ...internal.workspace import add_uproject_argument, open_workspace
 from .single_node import single_node_command
 
@@ -25,12 +26,12 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Name
     return parser.parse_known_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Optional[Sequence[str]] = None, *, runner: Optional[ProcessRunner] = None) -> int:
     args, extra_arguments = parse_arguments(argv)
 
     logger.info(f"Running ci.buildgraph with build tag: {args.build_tag} on machine {socket.gethostname()}")
 
-    with open_workspace(args) as workspace:
+    with open_workspace(args, runner=runner) as workspace:
         if args.no_single_node:
             logger.info("The flag --no-single-node was passed. Run the task with Target and not with SingleNode")
             command = BuildGraphCommand.for_workspace(

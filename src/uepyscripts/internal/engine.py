@@ -1,13 +1,17 @@
-import json
 from pathlib import Path
-from typing import Optional
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
+from pydantic import BaseModel, Field, ValidationError
 
-from uepyscripts import logger
-from uepyscripts.internal.engine_locator import EngineLocator
-from uepyscripts.internal.process import PopenRunner, ProcessRunner
+from uepyscripts.internal.errors import EngineNotFoundError, InvalidEngineError, describe_json_problems
+from uepyscripts.internal.process import ProcessRunner
 from uepyscripts.internal.project import Project
+
+
+class _BuildVersion(BaseModel):
+    major: int = Field(alias="MajorVersion")
+    minor: int = Field(alias="MinorVersion")
+    patch: int = Field(alias="PatchVersion")
 
 
 class Engine:
@@ -17,7 +21,7 @@ class Engine:
     built UnrealBuildTool.exe yet). A tool the OS can't start raises
     EngineToolNotStartedError when it is launched."""
 
-    def __init__(self, project: Project, root_path: Path, runner: Optional[ProcessRunner] = None) -> None:
+    def __init__(self, project: Project, root_path: Path, runner: ProcessRunner) -> None:
         self.project = project
         self.root_path = root_path
         self.path = self.root_path.joinpath("Engine").resolve()
@@ -25,7 +29,7 @@ class Engine:
         self.saved_path = self.path.joinpath("Saved").resolve()
         self.version = self.get_version_number()
 
-        self._runner: ProcessRunner = runner if runner is not None else PopenRunner()
+        self._runner = runner
         batch_files = self.build_path / "BatchFiles"
         self._uat = batch_files / "RunUAT.bat"
         self._build_bat = batch_files / "Build.bat"
@@ -66,25 +70,31 @@ class Engine:
         self._runner.start([str(self._editor), str(self.project.uproject_path)])
 
     def get_version_number(self) -> Version:
-        version = ""
+        """MajorVersion.MinorVersion.PatchVersion from Build.version, followed by the
+        Jenkins build number when JenkinsBuild.version exists."""
+        build_version = self.build_path / "Build.version"
+        try:
+            numbers = _BuildVersion.model_validate_json(build_version.read_text(encoding="utf-8"))
+        except FileNotFoundError as e:
+            raise EngineNotFoundError(f"{self.root_path} is not an engine: {build_version} does not exist") from e
+        except OSError as e:
+            raise InvalidEngineError(f"Could not read {build_version}: {e}") from e
+        except ValidationError as e:
+            raise InvalidEngineError(f"Invalid {build_version}: {describe_json_problems(e)}") from e
 
-        with open(self.build_path.joinpath("Build.version")) as build_version_file:
-            version_json = json.load(build_version_file)
-            major = version_json["MajorVersion"]
-            minor = version_json["MinorVersion"]
-            patch = version_json["PatchVersion"]
-            version = f"{major}.{minor}.{patch}"
+        version = f"{numbers.major}.{numbers.minor}.{numbers.patch}"
 
-        if version == "":
-            raise Exception("Impossible to find the version number of the engine")
+        jenkins_version = self.build_path / "JenkinsBuild.version"
+        if not jenkins_version.exists():
+            return Version(version)
 
-        jenkins_file = Path(self.build_path.joinpath("JenkinsBuild.version"))
-
-        if jenkins_file.exists():
-            with open(jenkins_file) as jenkins_version_file:
-                version += f".{jenkins_version_file.read()}"
-
-        return Version(version)
+        try:
+            build_number = jenkins_version.read_text(encoding="utf-8").strip()
+            return Version(f"{version}.{build_number}")
+        except OSError as e:
+            raise InvalidEngineError(f"Could not read {jenkins_version}: {e}") from e
+        except InvalidVersion as e:
+            raise InvalidEngineError(f"Invalid {jenkins_version}: {build_number!r} is not a build number") from e
 
     def __str__(self) -> str:
         return f"""
@@ -93,11 +103,3 @@ class Engine:
 * Version : {self.version}
 ----- Engine infos -----
         """
-
-
-def resolve_engine(project: Project) -> Engine:
-    root_path = EngineLocator().locate(project)
-
-    engine = Engine(project, root_path)
-    logger.info(engine)
-    return engine

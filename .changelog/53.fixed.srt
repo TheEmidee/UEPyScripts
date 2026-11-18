@@ -1,0 +1,1 @@
+A malformed .uproject, Build.version or JenkinsBuild.version is now reported as one error line naming the file and its problems, instead of a traceback.
